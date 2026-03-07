@@ -1,0 +1,15 @@
+apiVersion: v1
+kind: PersistentVolume
+metadata:
+  name: "qwen3-5-4b-pv"
+  labels:
+    model: "qwen3-5-4b"
+spec:
+  capacity:
+    storage: "20Gi"
+  volumeMode: Filesystem
+  accessModes:
+    - ReadWriteOnce
+  hostPath:
+    path: "/home/trucdnd/Documents/models/"
+
