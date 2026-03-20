@@ -1,0 +1,16 @@
+apiVersion: kubeflow.org/v1
+kind: Notebook
+metadata:
+  name: demo-notebook
+  namespace: notebooks
+spec:
+  template:
+    spec:
+      containers:
+      - name: notebook
+        image: jupyter/tensorflow-notebook
+        resources:
+          limits:
+            cpu: "4"
+            memory: "2Gi"
+            nvidia.com/gpu: 1

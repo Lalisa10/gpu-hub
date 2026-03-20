@@ -1,5 +1,10 @@
 package com.trucdnd.gpu_hub_backend.auth.dto;
 
-public class TokenResponse {
-    
-}
+import lombok.Builder;
+
+@Builder
+public record TokenResponse(
+        String accessToken,
+        String refreshToken,
+        Long expiresIn
+) {}

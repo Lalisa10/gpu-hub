@@ -32,9 +32,9 @@ CREATE TABLE policies (
     memory_quota    BIGINT,                 -- MiB
 
     -- Hard limit per single workload
-    gpu_limit_per_workload      NUMERIC(10,2),
-    cpu_limit_per_workload      NUMERIC(10,2),
-    memory_limit_per_workload   BIGINT,
+    gpu_limit      NUMERIC(10,2),
+    cpu_limit      NUMERIC(10,2),
+    memory_limit   BIGINT,
 
     -- Over-quota borrowing weight (KAI: overQuotaWeight)
     over_quota_weight   NUMERIC(5,2) NOT NULL DEFAULT 1.0,
