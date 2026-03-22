@@ -38,4 +38,5 @@ public class User extends MutableEntity {
 
     @Transient
     private Set<UUID> teamIds;
+    
 }
