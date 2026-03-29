@@ -60,16 +60,20 @@ public class WorkloadService {
 
     public WorkloadDto patch(UUID id, PatchWorkloadRequest request) {
         Workload entity = getWorkload(id);
+        Project resolvedProject = entity.getProject();
+        Cluster resolvedCluster = entity.getCluster();
 
         if (request.projectId().isPresent()) {
             Project project = projectRepository.findById(request.projectId().orElse(null))
                     .orElseThrow(() -> new EntityNotFoundException("Project not found with id: " + request.projectId().orElse(null)));
             entity.setProject(project);
+            resolvedProject = project;
         }
         if (request.clusterId().isPresent()) {
             Cluster cluster = clusterRepository.findById(request.clusterId().orElse(null))
                     .orElseThrow(() -> new EntityNotFoundException("Cluster not found with id: " + request.clusterId().orElse(null)));
             entity.setCluster(cluster);
+            resolvedCluster = cluster;
         }
         if (request.submittedById().isPresent()) {
             User submittedBy = userRepository.findById(request.submittedById().orElse(null))
@@ -121,6 +125,7 @@ public class WorkloadService {
             entity.setExtra(request.extra().orElse(null));
         }
 
+        validateProjectCluster(resolvedProject, resolvedCluster.getId());
         return toDto(workloadRepository.save(entity));
     }
 
@@ -157,6 +162,8 @@ public class WorkloadService {
         WorkloadType workloadType = workloadTypeRepository.findById(workloadTypeId)
                 .orElseThrow(() -> new EntityNotFoundException("WorkloadType not found with id: " + workloadTypeId));
 
+        validateProjectCluster(project, clusterId);
+
         entity.setProject(project);
         entity.setCluster(cluster);
         entity.setSubmittedBy(submittedBy);
@@ -179,6 +186,12 @@ public class WorkloadService {
     private Workload getWorkload(UUID id) {
         return workloadRepository.findById(id)
                 .orElseThrow(() -> new EntityNotFoundException("Workload not found with id: " + id));
+    }
+
+    private void validateProjectCluster(Project project, UUID clusterId) {
+        if (!project.getCluster().getId().equals(clusterId)) {
+            throw new IllegalArgumentException("cluster_id of workload must match cluster_id of project");
+        }
     }
 
     private WorkloadDto toDto(Workload entity) {

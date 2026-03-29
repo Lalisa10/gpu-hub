@@ -16,7 +16,7 @@ jwt:
   refresh-token-expiration: ${JWT_REFRESH_EXPIRATION:604800}
 
 server:
-  port: 9000
+  port: 8080
 
 logging:
   level:

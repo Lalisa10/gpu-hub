@@ -1,5 +1,6 @@
 package com.trucdnd.gpu_hub_backend.team.service;
 
+import com.trucdnd.gpu_hub_backend.common.constants.Team.TeamRole;
 import com.trucdnd.gpu_hub_backend.team.dto.CreateTeamMemberRequest;
 import com.trucdnd.gpu_hub_backend.team.dto.PatchTeamMemberRequest;
 import com.trucdnd.gpu_hub_backend.team.dto.TeamMemberDto;
@@ -44,6 +45,7 @@ public class TeamMemberService {
         entity.setId(new TeamMemberId(request.userId(), request.teamId()));
         entity.setUser(user);
         entity.setTeam(team);
+        entity.setRole(request.role() != null ? request.role() : TeamRole.MEMBER);
         entity.setJoinedAt(request.joinedAt() != null ? request.joinedAt() : OffsetDateTime.now());
 
         return toDto(teamMemberRepository.save(entity));
@@ -51,6 +53,7 @@ public class TeamMemberService {
 
     public TeamMemberDto update(UUID teamId, UUID userId, UpdateTeamMemberRequest request) {
         TeamMember teamMember = getTeamMember(teamId, userId);
+        teamMember.setRole(request.role());
         teamMember.setJoinedAt(request.joinedAt());
         return toDto(teamMemberRepository.save(teamMember));
     }
@@ -58,6 +61,9 @@ public class TeamMemberService {
     public TeamMemberDto patch(UUID teamId, UUID userId, PatchTeamMemberRequest request) {
         TeamMember teamMember = getTeamMember(teamId, userId);
 
+        if (request.role().isPresent()) {
+            teamMember.setRole(request.role().orElse(null));
+        }
         if (request.joinedAt().isPresent()) {
             teamMember.setJoinedAt(request.joinedAt().orElse(null));
         }
@@ -77,6 +83,6 @@ public class TeamMemberService {
     }
 
     private TeamMemberDto toDto(TeamMember entity) {
-        return new TeamMemberDto(entity.getUser().getId(), entity.getTeam().getId(), entity.getJoinedAt());
+        return new TeamMemberDto(entity.getUser().getId(), entity.getTeam().getId(), entity.getRole(), entity.getJoinedAt());
     }
 }

@@ -6,6 +6,8 @@ import java.util.UUID;
 public record ProjectDto(
         UUID id,
         UUID teamId,
+        UUID clusterId,
+        UUID policyId,
         String name,
         String description,
         String mlflowExperimentId,

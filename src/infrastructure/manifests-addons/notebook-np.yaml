@@ -1,0 +1,16 @@
+apiVersion: v1
+kind: Service
+metadata:
+  name: demo-notebook-np
+  namespace: notebooks
+spec:
+  type: NodePort
+  selector:
+    notebook-name: demo-notebook
+  ports:
+    - name: http
+      protocol: TCP
+      port: 80
+      targetPort: 8888
+      nodePort: 30088
+

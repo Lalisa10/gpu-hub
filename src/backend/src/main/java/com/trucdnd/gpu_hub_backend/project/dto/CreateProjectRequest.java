@@ -7,6 +7,8 @@ import java.util.UUID;
 
 public record CreateProjectRequest(
         @NotNull UUID teamId,
+        @NotNull UUID clusterId,
+        @NotNull UUID policyId,
         @NotBlank String name,
         String description,
         String mlflowExperimentId,

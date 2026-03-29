@@ -6,4 +6,5 @@ import org.springframework.data.jpa.repository.JpaRepository;
 import java.util.UUID;
 
 public interface TeamClusterRepository extends JpaRepository<TeamCluster, UUID> {
+    boolean existsByTeam_IdAndCluster_Id(UUID teamId, UUID clusterId);
 }

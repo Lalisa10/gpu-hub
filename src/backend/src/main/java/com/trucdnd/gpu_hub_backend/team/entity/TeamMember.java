@@ -1,9 +1,12 @@
 package com.trucdnd.gpu_hub_backend.team.entity;
 
+import com.trucdnd.gpu_hub_backend.common.constants.Team.TeamRole;
 import com.trucdnd.gpu_hub_backend.user.entity.User;
 import jakarta.persistence.Column;
 import jakarta.persistence.EmbeddedId;
 import jakarta.persistence.Entity;
+import jakarta.persistence.EnumType;
+import jakarta.persistence.Enumerated;
 import jakarta.persistence.FetchType;
 import jakarta.persistence.JoinColumn;
 import jakarta.persistence.ManyToOne;
@@ -37,6 +40,10 @@ public class TeamMember {
     @MapsId("teamId")
     @JoinColumn(name = "team_id", nullable = false)
     private Team team;
+
+    @Column(name = "role", nullable = false)
+    @Enumerated(EnumType.STRING)
+    private TeamRole role;
 
     @Column(name = "joined_at", nullable = false)
     private OffsetDateTime joinedAt;
