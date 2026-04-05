@@ -8,6 +8,7 @@ import com.trucdnd.gpu_hub_backend.policy.service.PolicyService;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
 import org.springframework.http.ResponseEntity;
+import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.web.bind.annotation.*;
 
 import java.net.URI;
@@ -21,32 +22,38 @@ public class PolicyController {
     private final PolicyService policyService;
 
     @GetMapping
+    @PreAuthorize("hasRole('ADMIN')")
     public ResponseEntity<List<PolicyDto>> getAll() {
         return ResponseEntity.ok(policyService.findAll());
     }
 
     @GetMapping("/{id}")
+    @PreAuthorize("hasRole('ADMIN') or @rbac.canManagePolicy(#id)")
     public ResponseEntity<PolicyDto> getById(@PathVariable UUID id) {
         return ResponseEntity.ok(policyService.findById(id));
     }
 
     @PostMapping
+    @PreAuthorize("hasRole('ADMIN') or @rbac.canManagePolicyCreate(#request.clusterId())")
     public ResponseEntity<PolicyDto> create(@RequestBody @Valid CreatePolicyRequest request) {
         PolicyDto saved = policyService.create(request);
         return ResponseEntity.created(URI.create("/api/policies/" + saved.id())).body(saved);
     }
 
     @PutMapping("/{id}")
+    @PreAuthorize("hasRole('ADMIN') or @rbac.canManagePolicy(#id)")
     public ResponseEntity<PolicyDto> update(@PathVariable UUID id, @RequestBody @Valid UpdatePolicyRequest request) {
         return ResponseEntity.ok(policyService.update(id, request));
     }
 
     @PatchMapping("/{id}")
+    @PreAuthorize("hasRole('ADMIN') or @rbac.canManagePolicy(#id)")
     public ResponseEntity<PolicyDto> patch(@PathVariable UUID id, @RequestBody @Valid PatchPolicyRequest request) {
         return ResponseEntity.ok(policyService.patch(id, request));
     }
 
     @DeleteMapping("/{id}")
+    @PreAuthorize("hasRole('ADMIN') or @rbac.canManagePolicy(#id)")
     public ResponseEntity<Void> delete(@PathVariable UUID id) {
         policyService.delete(id);
         return ResponseEntity.noContent().build();

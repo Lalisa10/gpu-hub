@@ -8,7 +8,7 @@ import com.trucdnd.gpu_hub_backend.user.entity.User;
 import com.trucdnd.gpu_hub_backend.user.repository.UserRepository;
 import jakarta.persistence.EntityNotFoundException;
 import lombok.RequiredArgsConstructor;
-import org.springframework.security.crypto.bcrypt.BCryptPasswordEncoder;
+import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Service;
 
 import java.util.List;
@@ -18,7 +18,7 @@ import java.util.UUID;
 @RequiredArgsConstructor
 public class UserService {
     private final UserRepository userRepository;
-    private final BCryptPasswordEncoder passwordEncoder = new BCryptPasswordEncoder();
+    private final PasswordEncoder passwordEncoder;
 
     public List<UserDto> findAll() {
         return userRepository.findAll().stream().map(this::toDto).toList();
@@ -45,7 +45,7 @@ public class UserService {
         user.setUsername(request.username());
         user.setEmail(request.email());
         user.setFullName(request.fullName());
-        user.setPasswordHash(request.passwordHash());
+        user.setPasswordHash(passwordEncoder.encode(request.passwordHash()));
         user.setGlobalRole(request.globalRole());
         user.setIsActive(request.isActive());
         return toDto(userRepository.save(user));

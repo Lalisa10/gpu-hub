@@ -8,6 +8,7 @@ import com.trucdnd.gpu_hub_backend.workload.service.WorkloadService;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
 import org.springframework.http.ResponseEntity;
+import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.web.bind.annotation.*;
 
 import java.net.URI;
@@ -21,32 +22,38 @@ public class WorkloadController {
     private final WorkloadService workloadService;
 
     @GetMapping
+    @PreAuthorize("hasRole('ADMIN')")
     public ResponseEntity<List<WorkloadDto>> getAll() {
         return ResponseEntity.ok(workloadService.findAll());
     }
 
     @GetMapping("/{id}")
+    @PreAuthorize("hasRole('ADMIN')")
     public ResponseEntity<WorkloadDto> getById(@PathVariable UUID id) {
         return ResponseEntity.ok(workloadService.findById(id));
     }
 
     @PostMapping
+    @PreAuthorize("hasRole('ADMIN') or @rbac.canSubmitWorkload(#request.projectId(), #request.submittedById())")
     public ResponseEntity<WorkloadDto> create(@RequestBody @Valid CreateWorkloadRequest request) {
         WorkloadDto saved = workloadService.create(request);
         return ResponseEntity.created(URI.create("/api/workloads/" + saved.id())).body(saved);
     }
 
     @PutMapping("/{id}")
+    @PreAuthorize("hasRole('ADMIN')")
     public ResponseEntity<WorkloadDto> update(@PathVariable UUID id, @RequestBody @Valid UpdateWorkloadRequest request) {
         return ResponseEntity.ok(workloadService.update(id, request));
     }
 
     @PatchMapping("/{id}")
+    @PreAuthorize("hasRole('ADMIN')")
     public ResponseEntity<WorkloadDto> patch(@PathVariable UUID id, @RequestBody @Valid PatchWorkloadRequest request) {
         return ResponseEntity.ok(workloadService.patch(id, request));
     }
 
     @DeleteMapping("/{id}")
+    @PreAuthorize("hasRole('ADMIN')")
     public ResponseEntity<Void> delete(@PathVariable UUID id) {
         workloadService.delete(id);
         return ResponseEntity.noContent().build();

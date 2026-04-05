@@ -35,6 +35,14 @@ Thumbs.db
 
 # IDE / Editor
 .vscode/
+.claude
+**/.claude
+CLAUDE.md
+**/CLAUDE.md
+AGENT.md
+**/AGENT.md
+AGENTS.md
+**/AGENTS.md
 .idea/
 *.swp
 *.swo
@@ -48,3 +56,4 @@ Thumbs.db
 # Misc
 tmp/
 temp/
+venv/
