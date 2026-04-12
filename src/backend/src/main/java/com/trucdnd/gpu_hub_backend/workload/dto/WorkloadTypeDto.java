@@ -12,8 +12,7 @@ public record WorkloadTypeDto(
         BigDecimal defaultGpu,
         BigDecimal defaultCpu,
         Long defaultMemory,
-        Boolean supportsMultiGpu,
-        Boolean isService,
+        String priorityClass,
         Boolean isActive,
         OffsetDateTime createdAt,
         OffsetDateTime updatedAt

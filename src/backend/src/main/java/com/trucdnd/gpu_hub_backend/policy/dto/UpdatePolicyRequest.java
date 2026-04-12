@@ -4,21 +4,24 @@ import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.NotNull;
 
 import java.math.BigDecimal;
+import java.util.Map;
 import java.util.UUID;
 
 public record UpdatePolicyRequest(
         @NotNull UUID clusterId,
         @NotBlank String name,
         String description,
-        @NotNull Integer maxPriority,
+        @NotNull Integer priority,
         BigDecimal gpuQuota,
         BigDecimal cpuQuota,
         Long memoryQuota,
         BigDecimal gpuLimit,
         BigDecimal cpuLimit,
         Long memoryLimit,
-        @NotNull BigDecimal overQuotaWeight,
-        String nodeAffinity,
+        Integer gpuOverQuotaWeight,
+        Integer cpuOverQuotaWeight,
+        Integer memoryOverQuotaWeight,
+        Map<String, Object> nodeAffinity,
         String[] gpuTypes
 ) {
 }

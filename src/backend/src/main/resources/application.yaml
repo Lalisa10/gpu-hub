@@ -3,7 +3,7 @@ spring:
     name: gpu-hub-backend
   sql:
     init:
-      schema-locations: classpath:schema_v2.sql
+      schema-locations: classpath:schema_v3.sql
   datasource:
     url: ${DB_URL:jdbc:postgresql://localhost:5432/gpu-hub}
     username: ${DB_USERNAME:postgres}
@@ -20,11 +20,16 @@ object-storage:
     secret-key: ${MINIO_SECRET_KEY:minioadmin}
 
 kubernetes:
-  kubeconfig-bucket: ${KUBERNETES_KUBECONFIG_BUCKET:kubeconfig564}
+  kubeconfig-bucket: ${KUBERNETES_KUBECONFIG_BUCKET:kubeconfig}
 
 app:
   cors:
     allowed-origins: ${CORS_ALLOWED_ORIGINS:http://localhost:5173,http://127.0.0.1:5173}
+  bootstrap:
+    admin:
+      username: ${ADMIN_BOOTSTRAP_USERNAME:admin}
+      email: ${ADMIN_BOOTSTRAP_EMAIL:admin@gmail.com.vn}
+      password: ${ADMIN_BOOTSTRAP_PASSWORD:admin}
 
 jwt:
   secret: ${JWT_SECRET:A0adcU92dc7DOhOv8xXmpUuZwHmAhhW7OjCe2YdQn3A=}

@@ -7,6 +7,5 @@ import lombok.Builder;
 public record JoinClusterRequest(
     @NotBlank String name,
     String description,
-    String apiEndpoint,
     String kubeconfigRef
 ) { }

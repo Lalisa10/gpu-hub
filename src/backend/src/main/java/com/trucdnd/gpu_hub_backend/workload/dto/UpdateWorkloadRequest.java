@@ -13,7 +13,6 @@ public record UpdateWorkloadRequest(
         @NotNull UUID submittedById,
         @NotNull UUID workloadTypeId,
         @NotBlank String name,
-        @NotNull Integer priority,
         @NotNull BigDecimal requestedGpu,
         @NotNull BigDecimal requestedCpu,
         @NotNull Long requestedMemory,

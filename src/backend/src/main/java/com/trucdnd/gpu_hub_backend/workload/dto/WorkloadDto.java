@@ -11,7 +11,6 @@ public record WorkloadDto(
         UUID submittedById,
         UUID workloadTypeId,
         String name,
-        Integer priority,
         BigDecimal requestedGpu,
         BigDecimal requestedCpu,
         Long requestedMemory,

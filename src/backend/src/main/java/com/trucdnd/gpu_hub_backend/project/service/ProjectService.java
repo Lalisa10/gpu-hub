@@ -2,6 +2,7 @@ package com.trucdnd.gpu_hub_backend.project.service;
 
 import com.trucdnd.gpu_hub_backend.cluster.entity.Cluster;
 import com.trucdnd.gpu_hub_backend.cluster.repository.ClusterRepository;
+import com.trucdnd.gpu_hub_backend.kubernetes.service.QueueService;
 import com.trucdnd.gpu_hub_backend.policy.entity.Policy;
 import com.trucdnd.gpu_hub_backend.policy.repository.PolicyRepository;
 import com.trucdnd.gpu_hub_backend.project.dto.CreateProjectRequest;
@@ -11,8 +12,10 @@ import com.trucdnd.gpu_hub_backend.project.dto.UpdateProjectRequest;
 import com.trucdnd.gpu_hub_backend.project.entity.Project;
 import com.trucdnd.gpu_hub_backend.project.repository.ProjectRepository;
 import com.trucdnd.gpu_hub_backend.team.entity.Team;
+import com.trucdnd.gpu_hub_backend.team.entity.TeamCluster;
 import com.trucdnd.gpu_hub_backend.team.repository.TeamClusterRepository;
 import com.trucdnd.gpu_hub_backend.team.repository.TeamRepository;
+
 import jakarta.persistence.EntityNotFoundException;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
@@ -28,6 +31,7 @@ public class ProjectService {
     private final ClusterRepository clusterRepository;
     private final PolicyRepository policyRepository;
     private final TeamClusterRepository teamClusterRepository;
+    private final QueueService queueService;
 
     public List<ProjectDto> findAll() {
         return projectRepository.findAll().stream().map(this::toDto).toList();
@@ -39,15 +43,21 @@ public class ProjectService {
 
     public ProjectDto create(CreateProjectRequest request) {
         Project project = new Project();
+        Cluster cluster = clusterRepository.findById(request.clusterId())
+            .orElseThrow(() -> new EntityNotFoundException("Cluster not found!"));
+        Team team = teamRepository.findById(request.teamId())
+            .orElseThrow(() -> new EntityNotFoundException("Team not found!"));
+        TeamCluster teamCluster = teamClusterRepository.findByTeam_IdAndCluster_Id(team.getId(), cluster.getId())
+            .orElseThrow(() -> new EntityNotFoundException("Team - Cluster not found!"));
+
         apply(
                 project,
                 request.teamId(),
                 request.clusterId(),
                 request.policyId(),
                 request.name(),
-                request.description(),
-                request.mlflowExperimentId(),
-                request.minioPrefix());
+                request.description());
+        queueService.createProjectQueue(project, queueService.getTeamQueueName(teamCluster));
         return toDto(projectRepository.save(project));
     }
 
@@ -59,9 +69,7 @@ public class ProjectService {
                 request.clusterId(),
                 request.policyId(),
                 request.name(),
-                request.description(),
-                request.mlflowExperimentId(),
-                request.minioPrefix());
+                request.description());
         return toDto(projectRepository.save(project));
     }
 
@@ -90,12 +98,6 @@ public class ProjectService {
         if (request.description().isPresent()) {
             project.setDescription(request.description().orElse(null));
         }
-        if (request.mlflowExperimentId().isPresent()) {
-            project.setMlflowExperimentId(request.mlflowExperimentId().orElse(null));
-        }
-        if (request.minioPrefix().isPresent()) {
-            project.setMinioPrefix(request.minioPrefix().orElse(null));
-        }
 
         return toDto(projectRepository.save(project));
     }
@@ -110,9 +112,7 @@ public class ProjectService {
             UUID clusterId,
             UUID policyId,
             String name,
-            String description,
-            String mlflowExperimentId,
-            String minioPrefix) {
+            String description) {
         Team team = teamRepository.findById(teamId)
                 .orElseThrow(() -> new EntityNotFoundException("Team not found with id: " + teamId));
         Cluster cluster = clusterRepository.findById(clusterId)
@@ -127,8 +127,6 @@ public class ProjectService {
         project.setPolicy(policy);
         project.setName(name);
         project.setDescription(description);
-        project.setMlflowExperimentId(mlflowExperimentId);
-        project.setMinioPrefix(minioPrefix);
     }
 
     private void validateProjectScope(UUID teamId, UUID clusterId, Policy policy) {
@@ -153,8 +151,6 @@ public class ProjectService {
                 project.getPolicy().getId(),
                 project.getName(),
                 project.getDescription(),
-                project.getMlflowExperimentId(),
-                project.getMinioPrefix(),
                 project.getCreatedAt(),
                 project.getUpdatedAt()
         );

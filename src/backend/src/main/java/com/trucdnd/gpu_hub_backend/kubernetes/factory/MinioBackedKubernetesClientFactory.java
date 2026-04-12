@@ -43,9 +43,6 @@ public class MinioBackedKubernetesClientFactory implements KubernetesClientFacto
         );
 
         Config config = Config.fromKubeconfig(kubeconfig);
-        if (cluster.getApiEndpoint() != null && !cluster.getApiEndpoint().isBlank()) {
-            config.setMasterUrl(cluster.getApiEndpoint());
-        }
         return new KubernetesClientBuilder().withConfig(config).build();
     }
 }

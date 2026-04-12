@@ -14,7 +14,6 @@ public class ClusterMapper {
                 .id(cluster.getId())
                 .name(cluster.getName())
                 .description(cluster.getDescription())
-                .apiEndpoint(cluster.getApiEndpoint())
                 .status(cluster.getStatus())
                 .createdAt(cluster.getCreatedAt())
                 .updatedAt(cluster.getUpdatedAt())
@@ -25,7 +24,6 @@ public class ClusterMapper {
         return Cluster.builder()
                 .name(request.name())
                 .description(request.description())
-                .apiEndpoint(request.apiEndpoint())
                 .kubeconfigRef(request.kubeconfigRef())
                 .build();
     }

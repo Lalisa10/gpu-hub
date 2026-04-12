@@ -1,7 +1,6 @@
 package com.trucdnd.gpu_hub_backend.team.controller;
 
 import com.trucdnd.gpu_hub_backend.team.dto.CreateTeamClusterRequest;
-import com.trucdnd.gpu_hub_backend.team.dto.PatchTeamClusterRequest;
 import com.trucdnd.gpu_hub_backend.team.dto.TeamClusterDto;
 import com.trucdnd.gpu_hub_backend.team.dto.UpdateTeamClusterRequest;
 import com.trucdnd.gpu_hub_backend.team.service.TeamClusterService;
@@ -39,11 +38,6 @@ public class TeamClusterController {
     @PutMapping("/{id}")
     public ResponseEntity<TeamClusterDto> update(@PathVariable UUID id, @RequestBody @Valid UpdateTeamClusterRequest request) {
         return ResponseEntity.ok(teamClusterService.update(id, request));
-    }
-
-    @PatchMapping("/{id}")
-    public ResponseEntity<TeamClusterDto> patch(@PathVariable UUID id, @RequestBody @Valid PatchTeamClusterRequest request) {
-        return ResponseEntity.ok(teamClusterService.patch(id, request));
     }
 
     @DeleteMapping("/{id}")

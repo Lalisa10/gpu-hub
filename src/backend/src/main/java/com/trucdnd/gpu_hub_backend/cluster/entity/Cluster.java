@@ -24,9 +24,6 @@ public class Cluster extends MutableEntity {
     @Column(name = "description")
     private String description;
 
-    @Column(name = "api_endpoint", nullable = false)
-    private String apiEndpoint;
-
     @Column(name = "kubeconfig_ref")
     private String kubeconfigRef;
 

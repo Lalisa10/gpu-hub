@@ -2,17 +2,23 @@ package com.trucdnd.gpu_hub_backend.policy.service;
 
 import com.trucdnd.gpu_hub_backend.cluster.entity.Cluster;
 import com.trucdnd.gpu_hub_backend.cluster.repository.ClusterRepository;
+import com.trucdnd.gpu_hub_backend.kubernetes.service.QueueService;
 import com.trucdnd.gpu_hub_backend.policy.dto.CreatePolicyRequest;
 import com.trucdnd.gpu_hub_backend.policy.dto.PatchPolicyRequest;
 import com.trucdnd.gpu_hub_backend.policy.dto.PolicyDto;
 import com.trucdnd.gpu_hub_backend.policy.dto.UpdatePolicyRequest;
 import com.trucdnd.gpu_hub_backend.policy.entity.Policy;
 import com.trucdnd.gpu_hub_backend.policy.repository.PolicyRepository;
+import com.trucdnd.gpu_hub_backend.project.entity.Project;
+import com.trucdnd.gpu_hub_backend.project.repository.ProjectRepository;
+import com.trucdnd.gpu_hub_backend.team.entity.TeamCluster;
+import com.trucdnd.gpu_hub_backend.team.repository.TeamClusterRepository;
 import jakarta.persistence.EntityNotFoundException;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
 
 import java.util.List;
+import java.util.Map;
 import java.util.UUID;
 
 @Service
@@ -20,6 +26,9 @@ import java.util.UUID;
 public class PolicyService {
     private final PolicyRepository policyRepository;
     private final ClusterRepository clusterRepository;
+    private final QueueService queueService;
+    private final TeamClusterRepository teamClusterRepository;
+    private final ProjectRepository projectRepository;
 
     public List<PolicyDto> findAll() {
         return policyRepository.findAll().stream().map(this::toDto).toList();
@@ -31,18 +40,22 @@ public class PolicyService {
 
     public PolicyDto create(CreatePolicyRequest request) {
         Policy policy = new Policy();
-        apply(policy, request.clusterId(), request.name(), request.description(), request.maxPriority(),
+        apply(policy, request.clusterId(), request.name(), request.description(), request.priority(),
                 request.gpuQuota(), request.cpuQuota(), request.memoryQuota(), request.gpuLimit(), request.cpuLimit(),
-                request.memoryLimit(), request.overQuotaWeight(), request.nodeAffinity(), request.gpuTypes());
+                request.memoryLimit(), request.gpuOverQuotaWeight(), request.cpuOverQuotaWeight(),
+                request.memoryOverQuotaWeight(), request.nodeAffinity(), request.gpuTypes());
         return toDto(policyRepository.save(policy));
     }
 
     public PolicyDto update(UUID id, UpdatePolicyRequest request) {
         Policy policy = getPolicy(id);
-        apply(policy, request.clusterId(), request.name(), request.description(), request.maxPriority(),
+        apply(policy, request.clusterId(), request.name(), request.description(), request.priority(),
                 request.gpuQuota(), request.cpuQuota(), request.memoryQuota(), request.gpuLimit(), request.cpuLimit(),
-                request.memoryLimit(), request.overQuotaWeight(), request.nodeAffinity(), request.gpuTypes());
-        return toDto(policyRepository.save(policy));
+                request.memoryLimit(), request.gpuOverQuotaWeight(), request.cpuOverQuotaWeight(),
+                request.memoryOverQuotaWeight(), request.nodeAffinity(), request.gpuTypes());
+        PolicyDto dto = toDto(policyRepository.save(policy));
+        syncQueues(policy);
+        return dto;
     }
 
     public PolicyDto patch(UUID id, PatchPolicyRequest request) {
@@ -59,8 +72,8 @@ public class PolicyService {
         if (request.description().isPresent()) {
             policy.setDescription(request.description().orElse(null));
         }
-        if (request.maxPriority().isPresent()) {
-            policy.setMaxPriority(request.maxPriority().orElse(null));
+        if (request.priority().isPresent()) {
+            policy.setPriority(request.priority().orElse(null));
         }
         if (request.gpuQuota().isPresent()) {
             policy.setGpuQuota(request.gpuQuota().orElse(null));
@@ -80,8 +93,14 @@ public class PolicyService {
         if (request.memoryLimit().isPresent()) {
             policy.setMemoryLimit(request.memoryLimit().orElse(null));
         }
-        if (request.overQuotaWeight().isPresent()) {
-            policy.setOverQuotaWeight(request.overQuotaWeight().orElse(null));
+        if (request.gpuOverQuotaWeight().isPresent()) {
+            policy.setGpuOverQuotaWeight(request.gpuOverQuotaWeight().orElse(null));
+        }
+        if (request.cpuOverQuotaWeight().isPresent()) {
+            policy.setCpuOverQuotaWeight(request.cpuOverQuotaWeight().orElse(null));
+        }
+        if (request.memoryOverQuotaWeight().isPresent()) {
+            policy.setMemoryOverQuotaWeight(request.memoryOverQuotaWeight().orElse(null));
         }
         if (request.nodeAffinity().isPresent()) {
             policy.setNodeAffinity(request.nodeAffinity().orElse(null));
@@ -90,11 +109,15 @@ public class PolicyService {
             policy.setGpuTypes(request.gpuTypes().orElse(null));
         }
 
-        return toDto(policyRepository.save(policy));
+        PolicyDto dto = toDto(policyRepository.save(policy));
+        syncQueues(policy);
+        return dto;
     }
 
     public void delete(UUID id) {
-        policyRepository.delete(getPolicy(id));
+        Policy policy = getPolicy(id);
+        deleteQueues(policy);
+        policyRepository.delete(policy);
     }
 
     private void apply(
@@ -102,15 +125,17 @@ public class PolicyService {
             UUID clusterId,
             String name,
             String description,
-            Integer maxPriority,
+            Integer priority,
             java.math.BigDecimal gpuQuota,
             java.math.BigDecimal cpuQuota,
             Long memoryQuota,
             java.math.BigDecimal gpuLimit,
             java.math.BigDecimal cpuLimit,
             Long memoryLimit,
-            java.math.BigDecimal overQuotaWeight,
-            String nodeAffinity,
+            Integer gpuOverQuotaWeight,
+            Integer cpuOverQuotaWeight,
+            Integer memoryOverQuotaWeight,
+            Map<String, Object> nodeAffinity,
             String[] gpuTypes) {
         Cluster cluster = clusterRepository.findById(clusterId)
                 .orElseThrow(() -> new EntityNotFoundException("Cluster not found with id: " + clusterId));
@@ -118,16 +143,36 @@ public class PolicyService {
         policy.setCluster(cluster);
         policy.setName(name);
         policy.setDescription(description);
-        policy.setMaxPriority(maxPriority);
+        policy.setPriority(priority);
         policy.setGpuQuota(gpuQuota);
         policy.setCpuQuota(cpuQuota);
         policy.setMemoryQuota(memoryQuota);
         policy.setGpuLimit(gpuLimit);
         policy.setCpuLimit(cpuLimit);
         policy.setMemoryLimit(memoryLimit);
-        policy.setOverQuotaWeight(overQuotaWeight);
+        policy.setGpuOverQuotaWeight(gpuOverQuotaWeight);
+        policy.setCpuOverQuotaWeight(cpuOverQuotaWeight);
+        policy.setMemoryOverQuotaWeight(memoryOverQuotaWeight);
         policy.setNodeAffinity(nodeAffinity);
         policy.setGpuTypes(gpuTypes);
+    }
+
+    private void syncQueues(Policy policy) {
+        for (TeamCluster tc : teamClusterRepository.findByPolicy_Id(policy.getId())) {
+            queueService.updateTeamQueue(tc);
+        }
+        for (Project project : projectRepository.findByPolicy_Id(policy.getId())) {
+            queueService.updateProjectQueue(project);
+        }
+    }
+
+    private void deleteQueues(Policy policy) {
+        for (TeamCluster tc : teamClusterRepository.findByPolicy_Id(policy.getId())) {
+            queueService.deleteTeamQueue(tc);
+        }
+        for (Project project : projectRepository.findByPolicy_Id(policy.getId())) {
+            queueService.deleteProjectQueue(project);
+        }
     }
 
     private Policy getPolicy(UUID id) {
@@ -141,14 +186,16 @@ public class PolicyService {
                 policy.getCluster().getId(),
                 policy.getName(),
                 policy.getDescription(),
-                policy.getMaxPriority(),
+                policy.getPriority(),
                 policy.getGpuQuota(),
                 policy.getCpuQuota(),
                 policy.getMemoryQuota(),
                 policy.getGpuLimit(),
                 policy.getCpuLimit(),
                 policy.getMemoryLimit(),
-                policy.getOverQuotaWeight(),
+                policy.getGpuOverQuotaWeight(),
+                policy.getCpuOverQuotaWeight(),
+                policy.getMemoryOverQuotaWeight(),
                 policy.getNodeAffinity(),
                 policy.getGpuTypes(),
                 policy.getCreatedAt(),

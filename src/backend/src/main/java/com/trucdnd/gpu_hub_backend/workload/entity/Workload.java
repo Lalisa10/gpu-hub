@@ -45,9 +45,6 @@ public class Workload extends MutableEntity {
     @Column(name = "name", nullable = false)
     private String name;
 
-    @Column(name = "priority", nullable = false)
-    private Integer priority;
-
     @Column(name = "requested_gpu", nullable = false, precision = 10, scale = 2)
     private BigDecimal requestedGpu;
 

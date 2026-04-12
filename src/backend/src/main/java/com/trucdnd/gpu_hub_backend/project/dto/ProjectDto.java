@@ -10,8 +10,6 @@ public record ProjectDto(
         UUID policyId,
         String name,
         String description,
-        String mlflowExperimentId,
-        String minioPrefix,
         OffsetDateTime createdAt,
         OffsetDateTime updatedAt
 ) {

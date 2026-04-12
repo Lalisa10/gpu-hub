@@ -44,10 +44,4 @@ public class Project extends MutableEntity {
 
     @Column(name = "description")
     private String description;
-
-    @Column(name = "mlflow_experiment_id")
-    private String mlflowExperimentId;
-
-    @Column(name = "minio_prefix")
-    private String minioPrefix;
 }

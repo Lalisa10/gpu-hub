@@ -13,6 +13,8 @@ import org.hibernate.annotations.JdbcTypeCode;
 import org.hibernate.type.SqlTypes;
 
 import java.math.BigDecimal;
+import java.util.Map;
+
 
 @Entity
 @Table(
@@ -33,8 +35,8 @@ public class Policy extends MutableEntity {
     @Column(name = "description")
     private String description;
 
-    @Column(name = "max_priority", nullable = false)
-    private Integer maxPriority;
+    @Column(name = "priority", nullable = false)
+    private Integer priority;
 
     @Column(name = "gpu_quota", precision = 10, scale = 2)
     private BigDecimal gpuQuota;
@@ -54,11 +56,18 @@ public class Policy extends MutableEntity {
     @Column(name = "memory_limit")
     private Long memoryLimit;
 
-    @Column(name = "over_quota_weight", nullable = false, precision = 5, scale = 2)
-    private BigDecimal overQuotaWeight;
+    @Column(name = "gpu_over_quota_weight")
+    private Integer gpuOverQuotaWeight;
+
+    @Column(name = "cpu_over_quota_weight")
+    private Integer cpuOverQuotaWeight;
+
+    @Column(name = "memory_over_quota_weight")
+    private Integer memoryOverQuotaWeight;
 
     @Column(name = "node_affinity", columnDefinition = "jsonb")
-    private String nodeAffinity;
+    @JdbcTypeCode(SqlTypes.JSON)
+    private Map<String, Object> nodeAffinity;
 
     @Column(name = "gpu_types", columnDefinition = "text[]")
     @JdbcTypeCode(SqlTypes.ARRAY)

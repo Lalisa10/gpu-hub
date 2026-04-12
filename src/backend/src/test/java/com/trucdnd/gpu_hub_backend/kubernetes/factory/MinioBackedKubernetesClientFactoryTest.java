@@ -80,7 +80,6 @@ class MinioBackedKubernetesClientFactoryTest {
         Cluster cluster = Cluster.builder()
                 .name("k3s-local")
                 .description("Local k3s cluster")
-                .apiEndpoint("https://127.0.0.1:6443")
                 .kubeconfigRef("k3s.yaml")
                 .status(Status.ACTIVE)
                 .build();

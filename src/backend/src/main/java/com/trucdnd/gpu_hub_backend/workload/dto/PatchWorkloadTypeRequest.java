@@ -14,8 +14,7 @@ public record PatchWorkloadTypeRequest(
         Optional<BigDecimal> defaultGpu,
         Optional<BigDecimal> defaultCpu,
         Optional<Long> defaultMemory,
-        Optional<Boolean> supportsMultiGpu,
-        Optional<Boolean> isService,
+        Optional<@NotBlank String> priorityClass,
         Optional<Boolean> isActive
 ) {
 }

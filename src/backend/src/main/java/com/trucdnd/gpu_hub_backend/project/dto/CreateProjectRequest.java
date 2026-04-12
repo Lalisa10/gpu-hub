@@ -10,8 +10,6 @@ public record CreateProjectRequest(
         @NotNull UUID clusterId,
         @NotNull UUID policyId,
         @NotBlank String name,
-        String description,
-        String mlflowExperimentId,
-        String minioPrefix
+        String description
 ) {
 }

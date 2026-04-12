@@ -38,11 +38,8 @@ public class WorkloadType extends MutableEntity {
     @Column(name = "default_memory")
     private Long defaultMemory;
 
-    @Column(name = "supports_multi_gpu", nullable = false)
-    private Boolean supportsMultiGpu;
-
-    @Column(name = "is_service", nullable = false)
-    private Boolean isService;
+    @Column(name = "priority_class", nullable = false)
+    private String priorityClass;
 
     @Column(name = "is_active", nullable = false)
     private Boolean isActive;

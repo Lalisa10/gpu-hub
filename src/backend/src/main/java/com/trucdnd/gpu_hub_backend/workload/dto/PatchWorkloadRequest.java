@@ -15,7 +15,6 @@ public record PatchWorkloadRequest(
         Optional<UUID> submittedById,
         Optional<UUID> workloadTypeId,
         Optional<@NotBlank String> name,
-        Optional<Integer> priority,
         Optional<BigDecimal> requestedGpu,
         Optional<BigDecimal> requestedCpu,
         Optional<Long> requestedMemory,

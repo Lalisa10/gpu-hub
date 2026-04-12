@@ -13,7 +13,6 @@ public record ClusterDto(
     @NotNull UUID id,
     @NotBlank String name,
     String description,
-    @NotBlank String apiEndpoint,
     @NotNull Cluster.Status status,
     @NotNull OffsetDateTime createdAt,
     @NotNull OffsetDateTime updatedAt

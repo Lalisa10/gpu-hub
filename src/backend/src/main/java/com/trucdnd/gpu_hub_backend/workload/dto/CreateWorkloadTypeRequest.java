@@ -12,8 +12,7 @@ public record CreateWorkloadTypeRequest(
         BigDecimal defaultGpu,
         BigDecimal defaultCpu,
         Long defaultMemory,
-        @NotNull Boolean supportsMultiGpu,
-        @NotNull Boolean isService,
+        @NotBlank String priorityClass,
         @NotNull Boolean isActive
 ) {
 }

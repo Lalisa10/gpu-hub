@@ -1,15 +1,19 @@
 package com.trucdnd.gpu_hub_backend.cluster.service;
 
+import java.io.IOException;
 import java.util.List;
 import java.util.UUID;
 import java.util.stream.Collectors;
 
 import org.springframework.stereotype.Service;
+import org.springframework.web.multipart.MultipartFile;
 import com.trucdnd.gpu_hub_backend.cluster.dto.*;
 import com.trucdnd.gpu_hub_backend.cluster.entity.Cluster;
 import com.trucdnd.gpu_hub_backend.cluster.mapper.ClusterMapper;
 import com.trucdnd.gpu_hub_backend.cluster.repository.ClusterRepository;
 import com.trucdnd.gpu_hub_backend.common.constants.Cluster.Status;
+import com.trucdnd.gpu_hub_backend.kubernetes.config.KubernetesProperties;
+import com.trucdnd.gpu_hub_backend.object_storage.service.ObjectStorageService;
 
 import jakarta.persistence.EntityNotFoundException;
 import lombok.RequiredArgsConstructor;
@@ -19,6 +23,8 @@ import lombok.RequiredArgsConstructor;
 public class ClusterService {
 
     private final ClusterRepository clusterRepository;
+    private final ObjectStorageService objectStorageService;
+    private final KubernetesProperties kubernetesProperties;
 
     public List<ClusterDto> findAll() {
         return clusterRepository.findAll()
@@ -49,7 +55,6 @@ public class ClusterService {
         .orElseThrow(() -> new EntityNotFoundException("Cluster not found with id: " + clusterDto.id()));
         cluster.setName(clusterDto.name());
         cluster.setDescription(clusterDto.description());
-        cluster.setApiEndpoint(clusterDto.apiEndpoint());
         cluster.setStatus(clusterDto.status());
         Cluster saved = clusterRepository.save(cluster);
         return ClusterMapper.toDto(saved);
@@ -60,7 +65,6 @@ public class ClusterService {
                 .orElseThrow(() -> new EntityNotFoundException("Cluster not found with id: " + id));
         cluster.setName(request.name());
         cluster.setDescription(request.description());
-        cluster.setApiEndpoint(request.apiEndpoint());
         cluster.setKubeconfigRef(request.kubeconfigRef());
         Cluster saved = clusterRepository.save(cluster);
         return ClusterMapper.toDto(saved);
@@ -78,10 +82,6 @@ public class ClusterService {
             cluster.setName(request.name().orElse(null));
         }
 
-        if (request.apiEndpoint().isPresent()) {
-            cluster.setApiEndpoint(request.apiEndpoint().orElse(null));
-        }
-
         if (request.kubeconfigRef().isPresent()) {
             cluster.setKubeconfigRef(request.kubeconfigRef().orElse(null));
         }
@@ -93,5 +93,25 @@ public class ClusterService {
         return ClusterMapper.toDto(clusterRepository.save(cluster));
     }
 
+    public ClusterDto uploadKubeconfig(UUID id, MultipartFile file) {
+        Cluster cluster = clusterRepository.findById(id)
+                .orElseThrow(() -> new EntityNotFoundException("Cluster not found with id: " + id));
+
+        String objectKey = "clusters/" + id + "/kubeconfig";
+        try {
+            objectStorageService.putObject(
+                    kubernetesProperties.getKubeconfigBucket(),
+                    objectKey,
+                    file.getInputStream(),
+                    file.getSize(),
+                    file.getContentType() != null ? file.getContentType() : "application/octet-stream"
+            );
+        } catch (IOException e) {
+            throw new IllegalStateException("Failed to read uploaded kubeconfig file", e);
+        }
+
+        cluster.setKubeconfigRef(objectKey);
+        return ClusterMapper.toDto(clusterRepository.save(cluster));
+    }
 
 }

@@ -12,8 +12,6 @@ public record PatchProjectRequest(
         Optional<UUID> clusterId,
         Optional<UUID> policyId,
         Optional<@NotBlank String> name,
-        Optional<String> description,
-        Optional<String> mlflowExperimentId,
-        Optional<String> minioPrefix
+        Optional<String> description
 ) {
 }

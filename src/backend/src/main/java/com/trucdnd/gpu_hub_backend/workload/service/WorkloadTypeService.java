@@ -29,14 +29,14 @@ public class WorkloadTypeService {
     public WorkloadTypeDto create(CreateWorkloadTypeRequest request) {
         WorkloadType entity = new WorkloadType();
         apply(entity, request.name(), request.displayName(), request.description(), request.defaultGpu(), request.defaultCpu(),
-                request.defaultMemory(), request.supportsMultiGpu(), request.isService(), request.isActive());
+                request.defaultMemory(), request.priorityClass(), request.isActive());
         return toDto(workloadTypeRepository.save(entity));
     }
 
     public WorkloadTypeDto update(UUID id, UpdateWorkloadTypeRequest request) {
         WorkloadType entity = getWorkloadType(id);
         apply(entity, request.name(), request.displayName(), request.description(), request.defaultGpu(), request.defaultCpu(),
-                request.defaultMemory(), request.supportsMultiGpu(), request.isService(), request.isActive());
+                request.defaultMemory(), request.priorityClass(), request.isActive());
         return toDto(workloadTypeRepository.save(entity));
     }
 
@@ -61,11 +61,8 @@ public class WorkloadTypeService {
         if (request.defaultMemory().isPresent()) {
             entity.setDefaultMemory(request.defaultMemory().orElse(null));
         }
-        if (request.supportsMultiGpu().isPresent()) {
-            entity.setSupportsMultiGpu(request.supportsMultiGpu().orElse(null));
-        }
-        if (request.isService().isPresent()) {
-            entity.setIsService(request.isService().orElse(null));
+        if (request.priorityClass().isPresent()) {
+            entity.setPriorityClass(request.priorityClass().orElse(null));
         }
         if (request.isActive().isPresent()) {
             entity.setIsActive(request.isActive().orElse(null));
@@ -80,15 +77,14 @@ public class WorkloadTypeService {
 
     private void apply(WorkloadType entity, String name, String displayName, String description,
                        java.math.BigDecimal defaultGpu, java.math.BigDecimal defaultCpu, Long defaultMemory,
-                       Boolean supportsMultiGpu, Boolean isService, Boolean isActive) {
+                       String priorityClass, Boolean isActive) {
         entity.setName(name);
         entity.setDisplayName(displayName);
         entity.setDescription(description);
         entity.setDefaultGpu(defaultGpu);
         entity.setDefaultCpu(defaultCpu);
         entity.setDefaultMemory(defaultMemory);
-        entity.setSupportsMultiGpu(supportsMultiGpu);
-        entity.setIsService(isService);
+        entity.setPriorityClass(priorityClass);
         entity.setIsActive(isActive);
     }
 
@@ -106,8 +102,7 @@ public class WorkloadTypeService {
                 entity.getDefaultGpu(),
                 entity.getDefaultCpu(),
                 entity.getDefaultMemory(),
-                entity.getSupportsMultiGpu(),
-                entity.getIsService(),
+                entity.getPriorityClass(),
                 entity.getIsActive(),
                 entity.getCreatedAt(),
                 entity.getUpdatedAt()

@@ -43,7 +43,7 @@ public class WorkloadService {
     public WorkloadDto create(CreateWorkloadRequest request) {
         Workload entity = new Workload();
         apply(entity, request.projectId(), request.clusterId(), request.submittedById(), request.workloadTypeId(),
-                request.name(), request.priority(), request.requestedGpu(), request.requestedCpu(), request.requestedMemory(),
+                request.name(), request.requestedGpu(), request.requestedCpu(), request.requestedMemory(),
                 request.status(), request.k8sNamespace(), request.k8sResourceName(), request.k8sResourceKind(),
                 request.queuedAt(), request.startedAt(), request.finishedAt(), request.extra());
         return toDto(workloadRepository.save(entity));
@@ -52,7 +52,7 @@ public class WorkloadService {
     public WorkloadDto update(UUID id, UpdateWorkloadRequest request) {
         Workload entity = getWorkload(id);
         apply(entity, request.projectId(), request.clusterId(), request.submittedById(), request.workloadTypeId(),
-                request.name(), request.priority(), request.requestedGpu(), request.requestedCpu(), request.requestedMemory(),
+                request.name(), request.requestedGpu(), request.requestedCpu(), request.requestedMemory(),
                 request.status(), request.k8sNamespace(), request.k8sResourceName(), request.k8sResourceKind(),
                 request.queuedAt(), request.startedAt(), request.finishedAt(), request.extra());
         return toDto(workloadRepository.save(entity));
@@ -87,9 +87,6 @@ public class WorkloadService {
         }
         if (request.name().isPresent()) {
             entity.setName(request.name().orElse(null));
-        }
-        if (request.priority().isPresent()) {
-            entity.setPriority(request.priority().orElse(null));
         }
         if (request.requestedGpu().isPresent()) {
             entity.setRequestedGpu(request.requestedGpu().orElse(null));
@@ -140,7 +137,6 @@ public class WorkloadService {
             UUID submittedById,
             UUID workloadTypeId,
             String name,
-            Integer priority,
             BigDecimal requestedGpu,
             BigDecimal requestedCpu,
             Long requestedMemory,
@@ -169,7 +165,6 @@ public class WorkloadService {
         entity.setSubmittedBy(submittedBy);
         entity.setWorkloadType(workloadType);
         entity.setName(name);
-        entity.setPriority(priority);
         entity.setRequestedGpu(requestedGpu);
         entity.setRequestedCpu(requestedCpu);
         entity.setRequestedMemory(requestedMemory);
@@ -202,7 +197,6 @@ public class WorkloadService {
                 entity.getSubmittedBy().getId(),
                 entity.getWorkloadType().getId(),
                 entity.getName(),
-                entity.getPriority(),
                 entity.getRequestedGpu(),
                 entity.getRequestedCpu(),
                 entity.getRequestedMemory(),
