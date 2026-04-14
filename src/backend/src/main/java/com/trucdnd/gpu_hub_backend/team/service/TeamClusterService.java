@@ -2,7 +2,7 @@ package com.trucdnd.gpu_hub_backend.team.service;
 
 import com.trucdnd.gpu_hub_backend.cluster.entity.Cluster;
 import com.trucdnd.gpu_hub_backend.cluster.repository.ClusterRepository;
-import com.trucdnd.gpu_hub_backend.kubernetes.service.KubernetesService;
+import com.trucdnd.gpu_hub_backend.kubernetes.service.BuiltinResourceService;
 import com.trucdnd.gpu_hub_backend.kubernetes.service.QueueService;
 import com.trucdnd.gpu_hub_backend.policy.entity.Policy;
 import com.trucdnd.gpu_hub_backend.policy.repository.PolicyRepository;
@@ -28,7 +28,7 @@ public class TeamClusterService {
     private final TeamRepository teamRepository;
     private final ClusterRepository clusterRepository;
     private final PolicyRepository policyRepository;
-    private final KubernetesService kubernetesService;
+    private final BuiltinResourceService kubernetesService;
     private final QueueService queueService;
 
     public List<TeamClusterDto> findAll() {
@@ -41,11 +41,8 @@ public class TeamClusterService {
 
     public TeamClusterDto create(CreateTeamClusterRequest request) {
         TeamCluster teamCluster = new TeamCluster();
-        Cluster cluster = clusterRepository.findById(request.clusterId())
-            .orElseThrow(() -> new EntityNotFoundException("Cluster not found"));
-
         apply(teamCluster, request.teamId(), request.clusterId(), request.policyId(), request.namespace());
-        kubernetesService.createNamespace(cluster, request.namespace());
+        //kubernetesService.createNamespace(cluster, request.namespace());
         queueService.createTeamQueue(teamCluster);
 
         return toDto(teamClusterRepository.save(teamCluster));
@@ -66,7 +63,7 @@ public class TeamClusterService {
         Cluster cluster = clusterRepository.findById(teamCluster.getCluster().getId())
                         .orElseThrow(() -> new EntityNotFoundException("Cluster not found"));
 
-        kubernetesService.deleteNamespace(cluster, teamCluster.getCluster().getName());
+        kubernetesService.deleteNamespace(cluster, teamCluster.getNamespace());
     }
 
     private void apply(TeamCluster target, UUID teamId, UUID clusterId, UUID policyId, String namespace) {
@@ -84,7 +81,13 @@ public class TeamClusterService {
         target.setTeam(team);
         target.setCluster(cluster);
         target.setPolicy(policy);
-        target.setNamespace(namespace);
+        String normalizedNamespace = namespace == null ? "" : namespace.trim();
+        if (!isValidKubernetesName(normalizedNamespace)) {
+            throw new IllegalArgumentException(
+                    "Invalid namespace name '" + normalizedNamespace + "'. Namespace must match Kubernetes DNS-1123 label format: lowercase alphanumeric or '-', must start/end with alphanumeric, max 63 chars."
+            );
+        }
+        target.setNamespace(normalizedNamespace);
     }
 
     private TeamCluster getTeamCluster(UUID id) {
@@ -102,5 +105,12 @@ public class TeamClusterService {
                 entity.getCreatedAt(),
                 entity.getUpdatedAt()
         );
+    }
+
+    private boolean isValidKubernetesName(String value) {
+        return value != null
+                && !value.isBlank()
+                && value.length() <= 63
+                && value.matches("^[a-z0-9]([-a-z0-9]*[a-z0-9])?$");
     }
 }

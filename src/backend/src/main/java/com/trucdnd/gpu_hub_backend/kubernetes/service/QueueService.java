@@ -6,6 +6,7 @@ import java.util.Map;
 import org.springframework.stereotype.Service;
 
 import com.trucdnd.gpu_hub_backend.cluster.entity.Cluster;
+import com.trucdnd.gpu_hub_backend.common.exception.KubernetesOperationException;
 import com.trucdnd.gpu_hub_backend.kubernetes.factory.KubernetesClientFactory;
 import com.trucdnd.gpu_hub_backend.policy.entity.Policy;
 import com.trucdnd.gpu_hub_backend.project.entity.Project;
@@ -14,6 +15,7 @@ import com.trucdnd.gpu_hub_backend.team.entity.TeamCluster;
 import io.fabric8.kubernetes.api.model.GenericKubernetesResource;
 import io.fabric8.kubernetes.api.model.GenericKubernetesResourceBuilder;
 import io.fabric8.kubernetes.client.KubernetesClient;
+import io.fabric8.kubernetes.client.KubernetesClientException;
 import io.fabric8.kubernetes.client.dsl.Resource;
 import io.fabric8.kubernetes.client.dsl.base.ResourceDefinitionContext;
 import lombok.RequiredArgsConstructor;
@@ -65,53 +67,65 @@ public class QueueService {
     // ── Private helpers ───────────────────────────────────────────────────────
 
     private String buildTeamQueueName(TeamCluster teamCluster) {
-        return ("team-" + teamCluster.getTeam().getName()).toLowerCase().replaceAll("[^a-z0-9-]", "-");
+        return sanitizeQueueName("team-" + teamCluster.getTeam().getName());
     }
 
     private GenericKubernetesResource createQueue(Cluster cluster, String queueName,
             String parentQueueName, Policy policy) {
-        KubernetesClient client = clientFactory.createClient(cluster);
+        try {
+            KubernetesClient client = clientFactory.createClient(cluster);
 
-        Map<String, Object> spec = buildQueueSpec(parentQueueName, policy);
+            Map<String, Object> spec = buildQueueSpec(parentQueueName, policy);
 
-        GenericKubernetesResource queue = new GenericKubernetesResourceBuilder()
-                .withApiVersion("scheduling.run.ai/v2")
-                .withKind("Queue")
-                .withNewMetadata().withName(queueName).endMetadata()
-                .withAdditionalProperties(Map.of("spec", spec))
-                .build();
+            GenericKubernetesResource queue = new GenericKubernetesResourceBuilder()
+                    .withApiVersion("scheduling.run.ai/v2")
+                    .withKind("Queue")
+                    .withNewMetadata().withName(queueName).endMetadata()
+                    .withAdditionalProperties(Map.of("spec", spec))
+                    .build();
 
-        return client.genericKubernetesResources(QUEUE_CTX).resource(queue).create();
+            return client.genericKubernetesResources(QUEUE_CTX).resource(queue).create();
+        } catch (KubernetesClientException e) {
+            throw k8sError("create queue '" + queueName + "'", cluster, e);
+        }
     }
 
     private GenericKubernetesResource updateQueue(Cluster cluster, String queueName, Policy policy) {
-        KubernetesClient client = clientFactory.createClient(cluster);
+        try {
+            KubernetesClient client = clientFactory.createClient(cluster);
 
-        Resource<GenericKubernetesResource> resource = client.genericKubernetesResources(QUEUE_CTX)
-                .withName(queueName);
+            Resource<GenericKubernetesResource> resource = client.genericKubernetesResources(QUEUE_CTX)
+                    .withName(queueName);
 
-        GenericKubernetesResource existing = resource.get();
-        if (existing == null) {
-            throw new IllegalStateException("Queue not found: " + queueName);
+            GenericKubernetesResource existing = resource.get();
+            if (existing == null) {
+                throw new IllegalStateException("Queue not found: " + queueName);
+            }
+
+            @SuppressWarnings("unchecked")
+            Map<String, Object> currentSpec = (Map<String, Object>) existing.getAdditionalProperties()
+                    .getOrDefault("spec", new HashMap<>());
+
+            String parentQueue = currentSpec.containsKey("parentQueue")
+                    ? (String) currentSpec.get("parentQueue")
+                    : null;
+
+            Map<String, Object> newSpec = buildQueueSpec(parentQueue, policy);
+            existing.setAdditionalProperties(Map.of("spec", newSpec));
+
+            return client.genericKubernetesResources(QUEUE_CTX).resource(existing).update();
+        } catch (KubernetesClientException e) {
+            throw k8sError("update queue '" + queueName + "'", cluster, e);
         }
-
-        @SuppressWarnings("unchecked")
-        Map<String, Object> currentSpec = (Map<String, Object>) existing.getAdditionalProperties()
-                .getOrDefault("spec", new HashMap<>());
-
-        String parentQueue = currentSpec.containsKey("parentQueue")
-                ? (String) currentSpec.get("parentQueue")
-                : null;
-
-        Map<String, Object> newSpec = buildQueueSpec(parentQueue, policy);
-        existing.setAdditionalProperties(Map.of("spec", newSpec));
-
-        return client.genericKubernetesResources(QUEUE_CTX).resource(existing).update();
     }
 
     private void deleteQueue(Cluster cluster, String queueName) {
-        KubernetesClient client = clientFactory.createClient(cluster);
-        client.genericKubernetesResources(QUEUE_CTX).withName(queueName).delete();
+        try {
+            KubernetesClient client = clientFactory.createClient(cluster);
+            client.genericKubernetesResources(QUEUE_CTX).withName(queueName).delete();
+        } catch (KubernetesClientException e) {
+            throw k8sError("delete queue '" + queueName + "'", cluster, e);
+        }
     }
 
     private Map<String, Object> buildQueueSpec(String parentQueueName, Policy policy) {
@@ -155,5 +169,29 @@ public class QueueService {
                 "memory", memoryResource));
 
         return spec;
+    }
+
+    private String sanitizeQueueName(String rawName) {
+        String normalized = rawName == null ? "" : rawName.trim().toLowerCase()
+                .replaceAll("[^a-z0-9-]+", "-")
+                .replaceAll("-{2,}", "-")
+                .replaceAll("^-+", "")
+                .replaceAll("-+$", "");
+        if (normalized.isBlank()) {
+            throw new IllegalArgumentException("Invalid queue name derived from team name");
+        }
+        if (normalized.length() > 63) {
+            normalized = normalized.substring(0, 63).replaceAll("-+$", "");
+        }
+        return normalized;
+    }
+
+    private KubernetesOperationException k8sError(String action, Cluster cluster, KubernetesClientException e) {
+        String clusterName = cluster != null ? cluster.getName() : "unknown";
+        String detail = e.getMessage() != null ? e.getMessage() : "Unknown Kubernetes error";
+        return new KubernetesOperationException(
+                "Kubernetes operation failed while trying to " + action + " on cluster '" + clusterName + "': " + detail,
+                e
+        );
     }
 }

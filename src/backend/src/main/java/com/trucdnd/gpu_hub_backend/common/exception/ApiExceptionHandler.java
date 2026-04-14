@@ -26,6 +26,11 @@ public class ApiExceptionHandler {
         return build(HttpStatus.BAD_REQUEST, exception.getMessage());
     }
 
+    @ExceptionHandler(KubernetesOperationException.class)
+    public ResponseEntity<Map<String, Object>> handleKubernetes(KubernetesOperationException exception) {
+        return build(HttpStatus.BAD_REQUEST, exception.getMessage());
+    }
+
     @ExceptionHandler(AuthException.class)
     public ResponseEntity<Map<String, Object>> handleUnauthorized(AuthException exception) {
         return build(HttpStatus.UNAUTHORIZED, exception.getMessage());

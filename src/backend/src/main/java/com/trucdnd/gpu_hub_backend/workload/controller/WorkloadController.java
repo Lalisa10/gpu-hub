@@ -1,8 +1,6 @@
 package com.trucdnd.gpu_hub_backend.workload.controller;
 
 import com.trucdnd.gpu_hub_backend.workload.dto.CreateWorkloadRequest;
-import com.trucdnd.gpu_hub_backend.workload.dto.PatchWorkloadRequest;
-import com.trucdnd.gpu_hub_backend.workload.dto.UpdateWorkloadRequest;
 import com.trucdnd.gpu_hub_backend.workload.dto.WorkloadDto;
 import com.trucdnd.gpu_hub_backend.workload.service.WorkloadService;
 import jakarta.validation.Valid;
@@ -38,18 +36,6 @@ public class WorkloadController {
     public ResponseEntity<WorkloadDto> create(@RequestBody @Valid CreateWorkloadRequest request) {
         WorkloadDto saved = workloadService.create(request);
         return ResponseEntity.created(URI.create("/api/workloads/" + saved.id())).body(saved);
-    }
-
-    @PutMapping("/{id}")
-    @PreAuthorize("hasRole('ADMIN')")
-    public ResponseEntity<WorkloadDto> update(@PathVariable UUID id, @RequestBody @Valid UpdateWorkloadRequest request) {
-        return ResponseEntity.ok(workloadService.update(id, request));
-    }
-
-    @PatchMapping("/{id}")
-    @PreAuthorize("hasRole('ADMIN')")
-    public ResponseEntity<WorkloadDto> patch(@PathVariable UUID id, @RequestBody @Valid PatchWorkloadRequest request) {
-        return ResponseEntity.ok(workloadService.patch(id, request));
     }
 
     @DeleteMapping("/{id}")

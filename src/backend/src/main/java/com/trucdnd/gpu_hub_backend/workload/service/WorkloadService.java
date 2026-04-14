@@ -7,19 +7,18 @@ import com.trucdnd.gpu_hub_backend.project.repository.ProjectRepository;
 import com.trucdnd.gpu_hub_backend.user.entity.User;
 import com.trucdnd.gpu_hub_backend.user.repository.UserRepository;
 import com.trucdnd.gpu_hub_backend.workload.dto.CreateWorkloadRequest;
-import com.trucdnd.gpu_hub_backend.workload.dto.PatchWorkloadRequest;
-import com.trucdnd.gpu_hub_backend.workload.dto.UpdateWorkloadRequest;
 import com.trucdnd.gpu_hub_backend.workload.dto.WorkloadDto;
 import com.trucdnd.gpu_hub_backend.workload.entity.Workload;
-import com.trucdnd.gpu_hub_backend.workload.entity.WorkloadType;
 import com.trucdnd.gpu_hub_backend.workload.repository.WorkloadRepository;
-import com.trucdnd.gpu_hub_backend.workload.repository.WorkloadTypeRepository;
 import jakarta.persistence.EntityNotFoundException;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
 
+import com.trucdnd.gpu_hub_backend.common.constants.Workload.Type;
+import com.trucdnd.gpu_hub_backend.common.constants.Workload.Type.*;
+import com.trucdnd.gpu_hub_backend.common.utils.RandomK8sResourceNameGenerator;
+
 import java.math.BigDecimal;
-import java.time.OffsetDateTime;
 import java.util.List;
 import java.util.UUID;
 
@@ -30,7 +29,7 @@ public class WorkloadService {
     private final ProjectRepository projectRepository;
     private final ClusterRepository clusterRepository;
     private final UserRepository userRepository;
-    private final WorkloadTypeRepository workloadTypeRepository;
+    private final RandomK8sResourceNameGenerator suffixGenerator;
 
     public List<WorkloadDto> findAll() {
         return workloadRepository.findAll().stream().map(this::toDto).toList();
@@ -42,87 +41,13 @@ public class WorkloadService {
 
     public WorkloadDto create(CreateWorkloadRequest request) {
         Workload entity = new Workload();
-        apply(entity, request.projectId(), request.clusterId(), request.submittedById(), request.workloadTypeId(),
-                request.name(), request.requestedGpu(), request.requestedCpu(), request.requestedMemory(),
-                request.status(), request.k8sNamespace(), request.k8sResourceName(), request.k8sResourceKind(),
-                request.queuedAt(), request.startedAt(), request.finishedAt(), request.extra());
-        return toDto(workloadRepository.save(entity));
-    }
+        apply(entity, request.projectId(), request.clusterId(), request.submittedById(), request.workloadType(),
+                request.priorityClass(), request.name(), request.requestedGpu(), request.requestedCpu(),
+                request.requestedCpuLimit(), request.requestedMemory(), request.requestedMemoryLimit(), request.extra());
 
-    public WorkloadDto update(UUID id, UpdateWorkloadRequest request) {
-        Workload entity = getWorkload(id);
-        apply(entity, request.projectId(), request.clusterId(), request.submittedById(), request.workloadTypeId(),
-                request.name(), request.requestedGpu(), request.requestedCpu(), request.requestedMemory(),
-                request.status(), request.k8sNamespace(), request.k8sResourceName(), request.k8sResourceKind(),
-                request.queuedAt(), request.startedAt(), request.finishedAt(), request.extra());
-        return toDto(workloadRepository.save(entity));
-    }
-
-    public WorkloadDto patch(UUID id, PatchWorkloadRequest request) {
-        Workload entity = getWorkload(id);
-        Project resolvedProject = entity.getProject();
-        Cluster resolvedCluster = entity.getCluster();
-
-        if (request.projectId().isPresent()) {
-            Project project = projectRepository.findById(request.projectId().orElse(null))
-                    .orElseThrow(() -> new EntityNotFoundException("Project not found with id: " + request.projectId().orElse(null)));
-            entity.setProject(project);
-            resolvedProject = project;
-        }
-        if (request.clusterId().isPresent()) {
-            Cluster cluster = clusterRepository.findById(request.clusterId().orElse(null))
-                    .orElseThrow(() -> new EntityNotFoundException("Cluster not found with id: " + request.clusterId().orElse(null)));
-            entity.setCluster(cluster);
-            resolvedCluster = cluster;
-        }
-        if (request.submittedById().isPresent()) {
-            User submittedBy = userRepository.findById(request.submittedById().orElse(null))
-                    .orElseThrow(() -> new EntityNotFoundException("User not found with id: " + request.submittedById().orElse(null)));
-            entity.setSubmittedBy(submittedBy);
-        }
-        if (request.workloadTypeId().isPresent()) {
-            WorkloadType workloadType = workloadTypeRepository.findById(request.workloadTypeId().orElse(null))
-                    .orElseThrow(() -> new EntityNotFoundException("WorkloadType not found with id: " + request.workloadTypeId().orElse(null)));
-            entity.setWorkloadType(workloadType);
-        }
-        if (request.name().isPresent()) {
-            entity.setName(request.name().orElse(null));
-        }
-        if (request.requestedGpu().isPresent()) {
-            entity.setRequestedGpu(request.requestedGpu().orElse(null));
-        }
-        if (request.requestedCpu().isPresent()) {
-            entity.setRequestedCpu(request.requestedCpu().orElse(null));
-        }
-        if (request.requestedMemory().isPresent()) {
-            entity.setRequestedMemory(request.requestedMemory().orElse(null));
-        }
-        if (request.status().isPresent()) {
-            entity.setStatus(request.status().orElse(null));
-        }
-        if (request.k8sNamespace().isPresent()) {
-            entity.setK8sNamespace(request.k8sNamespace().orElse(null));
-        }
-        if (request.k8sResourceName().isPresent()) {
-            entity.setK8sResourceName(request.k8sResourceName().orElse(null));
-        }
-        if (request.k8sResourceKind().isPresent()) {
-            entity.setK8sResourceKind(request.k8sResourceKind().orElse(null));
-        }
-        if (request.queuedAt().isPresent()) {
-            entity.setQueuedAt(request.queuedAt().orElse(null));
-        }
-        if (request.startedAt().isPresent()) {
-            entity.setStartedAt(request.startedAt().orElse(null));
-        }
-        if (request.finishedAt().isPresent()) {
-            entity.setFinishedAt(request.finishedAt().orElse(null));
-        }
-        if (request.extra().isPresent()) {
-            entity.setExtra(request.extra().orElse(null));
-        }
-
-        validateProjectCluster(resolvedProject, resolvedCluster.getId());
+        entity.setStatus(com.trucdnd.gpu_hub_backend.common.constants.Workload.Status.QUEUED);
+        entity.setK8sResourceKind(convertToResourceKind(entity));
+        entity.setK8sResourceName(buildWorkloadName(entity));
         return toDto(workloadRepository.save(entity));
     }
 
@@ -135,18 +60,14 @@ public class WorkloadService {
             UUID projectId,
             UUID clusterId,
             UUID submittedById,
-            UUID workloadTypeId,
+            com.trucdnd.gpu_hub_backend.common.constants.Workload.Type workloadType,
+            com.trucdnd.gpu_hub_backend.common.constants.Workload.PriorityClass  priorityClass,
             String name,
             BigDecimal requestedGpu,
             BigDecimal requestedCpu,
+            BigDecimal requestedCpuLimit,
             Long requestedMemory,
-            String status,
-            String k8sNamespace,
-            String k8sResourceName,
-            String k8sResourceKind,
-            OffsetDateTime queuedAt,
-            OffsetDateTime startedAt,
-            OffsetDateTime finishedAt,
+            Long requestedMemoryLimit,
             String extra) {
 
         Project project = projectRepository.findById(projectId)
@@ -155,8 +76,6 @@ public class WorkloadService {
                 .orElseThrow(() -> new EntityNotFoundException("Cluster not found with id: " + clusterId));
         User submittedBy = userRepository.findById(submittedById)
                 .orElseThrow(() -> new EntityNotFoundException("User not found with id: " + submittedById));
-        WorkloadType workloadType = workloadTypeRepository.findById(workloadTypeId)
-                .orElseThrow(() -> new EntityNotFoundException("WorkloadType not found with id: " + workloadTypeId));
 
         validateProjectCluster(project, clusterId);
 
@@ -164,17 +83,13 @@ public class WorkloadService {
         entity.setCluster(cluster);
         entity.setSubmittedBy(submittedBy);
         entity.setWorkloadType(workloadType);
+        entity.setPriorityClass(priorityClass);
         entity.setName(name);
         entity.setRequestedGpu(requestedGpu);
         entity.setRequestedCpu(requestedCpu);
+        entity.setRequestedCpuLimit(requestedCpuLimit);
         entity.setRequestedMemory(requestedMemory);
-        entity.setStatus(status);
-        entity.setK8sNamespace(k8sNamespace);
-        entity.setK8sResourceName(k8sResourceName);
-        entity.setK8sResourceKind(k8sResourceKind);
-        entity.setQueuedAt(queuedAt);
-        entity.setStartedAt(startedAt);
-        entity.setFinishedAt(finishedAt);
+        entity.setRequestedMemoryLimit(requestedMemoryLimit);
         entity.setExtra(extra);
     }
 
@@ -195,11 +110,14 @@ public class WorkloadService {
                 entity.getProject().getId(),
                 entity.getCluster().getId(),
                 entity.getSubmittedBy().getId(),
-                entity.getWorkloadType().getId(),
+                entity.getWorkloadType(),
+                entity.getPriorityClass(),
                 entity.getName(),
                 entity.getRequestedGpu(),
                 entity.getRequestedCpu(),
+                entity.getRequestedCpuLimit(),
                 entity.getRequestedMemory(),
+                entity.getRequestedMemoryLimit(),
                 entity.getStatus(),
                 entity.getK8sNamespace(),
                 entity.getK8sResourceName(),
@@ -211,5 +129,24 @@ public class WorkloadService {
                 entity.getCreatedAt(),
                 entity.getUpdatedAt()
         );
+    }
+
+    private String buildWorkloadName(Workload workload) {
+        String userName = workload.getSubmittedBy().getUsername();
+        String resourceKind = convertToResourceKind(workload);
+        String suffix = suffixGenerator.generateString(5);
+        return userName + resourceKind + suffix;
+    }
+
+    private String convertToResourceKind (Workload workload) {
+        if (workload.getWorkloadType() == Type.LLM_INFERENCE) {
+            return "Deployment";
+        } else {
+            return "Notebook";
+        }
+    }
+
+    private void submit(Workload workload) {
+        
     }
 }

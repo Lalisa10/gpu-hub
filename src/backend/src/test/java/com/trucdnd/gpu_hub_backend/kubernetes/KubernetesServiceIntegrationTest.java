@@ -9,7 +9,7 @@ import com.trucdnd.gpu_hub_backend.cluster.repository.ClusterRepository;
 import com.trucdnd.gpu_hub_backend.kubernetes.config.KubernetesProperties;
 import com.trucdnd.gpu_hub_backend.kubernetes.factory.KubernetesClientFactory;
 import com.trucdnd.gpu_hub_backend.kubernetes.factory.MinioBackedKubernetesClientFactory;
-import com.trucdnd.gpu_hub_backend.kubernetes.service.KubernetesService;
+import com.trucdnd.gpu_hub_backend.kubernetes.service.BuiltinResourceService;
 import com.trucdnd.gpu_hub_backend.object_storage.service.ObjectStorageService;
 
 import io.fabric8.kubernetes.api.model.Namespace;
@@ -34,7 +34,7 @@ class KubernetesServiceIntegrationTest {
     @Autowired private ClusterRepository clusterRepository;
     @Autowired private ObjectStorageService objectStorageService;
     @Autowired private KubernetesClientFactory factory;
-    @Autowired private KubernetesService kubernetesService;
+    @Autowired private BuiltinResourceService kubernetesService;
     @Autowired private KubernetesProperties kubernetesProperties;
 
     private Cluster cluster;

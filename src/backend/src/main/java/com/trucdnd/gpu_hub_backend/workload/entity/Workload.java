@@ -4,8 +4,11 @@ import com.trucdnd.gpu_hub_backend.cluster.entity.Cluster;
 import com.trucdnd.gpu_hub_backend.common.entity.MutableEntity;
 import com.trucdnd.gpu_hub_backend.project.entity.Project;
 import com.trucdnd.gpu_hub_backend.user.entity.User;
+import com.trucdnd.gpu_hub_backend.common.constants.*;
 import jakarta.persistence.Column;
 import jakarta.persistence.Entity;
+import jakarta.persistence.EnumType;
+import jakarta.persistence.Enumerated;
 import jakarta.persistence.JoinColumn;
 import jakarta.persistence.ManyToOne;
 import jakarta.persistence.Table;
@@ -17,6 +20,9 @@ import lombok.Setter;
 
 import java.math.BigDecimal;
 import java.time.OffsetDateTime;
+
+import org.hibernate.annotations.JdbcTypeCode;
+import org.hibernate.type.SqlTypes;
 
 @Entity
 @Table(name = "workloads")
@@ -38,9 +44,13 @@ public class Workload extends MutableEntity {
     @JoinColumn(name = "submitted_by", nullable = false)
     private User submittedBy;
 
-    @ManyToOne(optional = false)
-    @JoinColumn(name = "workload_type_id", nullable = false)
-    private WorkloadType workloadType;
+    @Column(name = "workload_type", nullable = false)
+    @Enumerated(EnumType.STRING)
+    private com.trucdnd.gpu_hub_backend.common.constants.Workload.Type workloadType;
+
+    @Column(name = "priority_class", nullable = false)
+    @Enumerated(EnumType.STRING)
+    private com.trucdnd.gpu_hub_backend.common.constants.Workload.PriorityClass priorityClass;
 
     @Column(name = "name", nullable = false)
     private String name;
@@ -51,11 +61,18 @@ public class Workload extends MutableEntity {
     @Column(name = "requested_cpu", nullable = false, precision = 10, scale = 2)
     private BigDecimal requestedCpu;
 
+    @Column(name = "requested_cpu_limit", nullable = false, precision = 10, scale = 2)
+    private BigDecimal requestedCpuLimit;
+
     @Column(name = "requested_memory", nullable = false)
     private Long requestedMemory;
 
+    @Column(name = "requested_memory_limit", nullable = false)
+    private Long requestedMemoryLimit;
+
     @Column(name = "status", nullable = false)
-    private String status;
+    @Enumerated(EnumType.STRING)
+    private com.trucdnd.gpu_hub_backend.common.constants.Workload.Status status;
 
     @Column(name = "k8s_namespace")
     private String k8sNamespace;
@@ -76,5 +93,6 @@ public class Workload extends MutableEntity {
     private OffsetDateTime finishedAt;
 
     @Column(name = "extra", columnDefinition = "jsonb")
+    @JdbcTypeCode(SqlTypes.JSON)
     private String extra;
 }

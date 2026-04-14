@@ -3,7 +3,7 @@ spring:
     name: gpu-hub-backend
   sql:
     init:
-      schema-locations: classpath:schema_v3.sql
+      schema-locations: classpath:schema_v4.sql
   datasource:
     url: ${DB_URL:jdbc:postgresql://localhost:5432/gpu-hub}
     username: ${DB_USERNAME:postgres}
