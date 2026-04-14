@@ -5,6 +5,7 @@ import com.trucdnd.gpu_hub_backend.cluster.repository.ClusterRepository;
 import com.trucdnd.gpu_hub_backend.kubernetes.service.QueueService;
 import com.trucdnd.gpu_hub_backend.policy.entity.Policy;
 import com.trucdnd.gpu_hub_backend.policy.repository.PolicyRepository;
+import com.trucdnd.gpu_hub_backend.policy.service.QueueSpecBuilder;
 import com.trucdnd.gpu_hub_backend.project.dto.CreateProjectRequest;
 import com.trucdnd.gpu_hub_backend.project.dto.PatchProjectRequest;
 import com.trucdnd.gpu_hub_backend.project.dto.ProjectDto;
@@ -32,6 +33,7 @@ public class ProjectService {
     private final PolicyRepository policyRepository;
     private final TeamClusterRepository teamClusterRepository;
     private final QueueService queueService;
+    private final QueueSpecBuilder queueSpecBuilder;
 
     public List<ProjectDto> findAll() {
         return projectRepository.findAll().stream().map(this::toDto).toList();
@@ -57,7 +59,8 @@ public class ProjectService {
                 request.policyId(),
                 request.name(),
                 request.description());
-        queueService.createProjectQueue(project, queueService.getTeamQueueName(teamCluster));
+        String parentQueueName = queueSpecBuilder.buildTeamQueueName(teamCluster);
+        queueService.create(cluster, queueSpecBuilder.buildProjectQueue(project, parentQueueName));
         return toDto(projectRepository.save(project));
     }
 

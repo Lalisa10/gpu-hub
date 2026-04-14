@@ -13,6 +13,7 @@ import com.trucdnd.gpu_hub_backend.project.entity.Project;
 import com.trucdnd.gpu_hub_backend.project.repository.ProjectRepository;
 import com.trucdnd.gpu_hub_backend.team.entity.TeamCluster;
 import com.trucdnd.gpu_hub_backend.team.repository.TeamClusterRepository;
+import io.fabric8.kubernetes.api.model.GenericKubernetesResource;
 import jakarta.persistence.EntityNotFoundException;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
@@ -27,6 +28,7 @@ public class PolicyService {
     private final PolicyRepository policyRepository;
     private final ClusterRepository clusterRepository;
     private final QueueService queueService;
+    private final QueueSpecBuilder queueSpecBuilder;
     private final TeamClusterRepository teamClusterRepository;
     private final ProjectRepository projectRepository;
 
@@ -159,19 +161,27 @@ public class PolicyService {
 
     private void syncQueues(Policy policy) {
         for (TeamCluster tc : teamClusterRepository.findByPolicy_Id(policy.getId())) {
-            queueService.updateTeamQueue(tc);
+            GenericKubernetesResource queue = queueSpecBuilder.buildTeamQueue(tc);
+            queueService.update(tc.getCluster(), queue);
         }
         for (Project project : projectRepository.findByPolicy_Id(policy.getId())) {
-            queueService.updateProjectQueue(project);
+            TeamCluster tc = teamClusterRepository
+                    .findByTeam_IdAndCluster_Id(project.getTeam().getId(), project.getCluster().getId())
+                    .orElseThrow(() -> new EntityNotFoundException(
+                            "TeamCluster not found for team=" + project.getTeam().getId()
+                                    + " cluster=" + project.getCluster().getId()));
+            String parent = queueSpecBuilder.buildTeamQueueName(tc);
+            GenericKubernetesResource queue = queueSpecBuilder.buildProjectQueue(project, parent);
+            queueService.update(project.getCluster(), queue);
         }
     }
 
     private void deleteQueues(Policy policy) {
         for (TeamCluster tc : teamClusterRepository.findByPolicy_Id(policy.getId())) {
-            queueService.deleteTeamQueue(tc);
+            queueService.delete(tc.getCluster(), null, queueSpecBuilder.buildTeamQueueName(tc));
         }
         for (Project project : projectRepository.findByPolicy_Id(policy.getId())) {
-            queueService.deleteProjectQueue(project);
+            queueService.delete(project.getCluster(), null, queueSpecBuilder.buildProjectQueueName(project));
         }
     }
 

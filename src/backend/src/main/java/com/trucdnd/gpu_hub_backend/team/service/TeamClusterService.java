@@ -6,6 +6,7 @@ import com.trucdnd.gpu_hub_backend.kubernetes.service.BuiltinResourceService;
 import com.trucdnd.gpu_hub_backend.kubernetes.service.QueueService;
 import com.trucdnd.gpu_hub_backend.policy.entity.Policy;
 import com.trucdnd.gpu_hub_backend.policy.repository.PolicyRepository;
+import com.trucdnd.gpu_hub_backend.policy.service.QueueSpecBuilder;
 import com.trucdnd.gpu_hub_backend.team.dto.CreateTeamClusterRequest;
 import com.trucdnd.gpu_hub_backend.team.dto.TeamClusterDto;
 import com.trucdnd.gpu_hub_backend.team.dto.UpdateTeamClusterRequest;
@@ -30,6 +31,7 @@ public class TeamClusterService {
     private final PolicyRepository policyRepository;
     private final BuiltinResourceService kubernetesService;
     private final QueueService queueService;
+    private final QueueSpecBuilder queueSpecBuilder;
 
     public List<TeamClusterDto> findAll() {
         return teamClusterRepository.findAll().stream().map(this::toDto).toList();
@@ -43,7 +45,7 @@ public class TeamClusterService {
         TeamCluster teamCluster = new TeamCluster();
         apply(teamCluster, request.teamId(), request.clusterId(), request.policyId(), request.namespace());
         //kubernetesService.createNamespace(cluster, request.namespace());
-        queueService.createTeamQueue(teamCluster);
+        queueService.create(teamCluster.getCluster(), queueSpecBuilder.buildTeamQueue(teamCluster));
 
         return toDto(teamClusterRepository.save(teamCluster));
     }

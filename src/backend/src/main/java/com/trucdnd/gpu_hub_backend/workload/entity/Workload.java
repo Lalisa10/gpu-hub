@@ -4,7 +4,6 @@ import com.trucdnd.gpu_hub_backend.cluster.entity.Cluster;
 import com.trucdnd.gpu_hub_backend.common.entity.MutableEntity;
 import com.trucdnd.gpu_hub_backend.project.entity.Project;
 import com.trucdnd.gpu_hub_backend.user.entity.User;
-import com.trucdnd.gpu_hub_backend.common.constants.*;
 import jakarta.persistence.Column;
 import jakarta.persistence.Entity;
 import jakarta.persistence.EnumType;

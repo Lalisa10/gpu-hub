@@ -2,20 +2,23 @@ package com.trucdnd.gpu_hub_backend.workload.service;
 
 import com.trucdnd.gpu_hub_backend.cluster.entity.Cluster;
 import com.trucdnd.gpu_hub_backend.cluster.repository.ClusterRepository;
+import com.trucdnd.gpu_hub_backend.kubernetes.service.NotebookService;
 import com.trucdnd.gpu_hub_backend.project.entity.Project;
 import com.trucdnd.gpu_hub_backend.project.repository.ProjectRepository;
+import com.trucdnd.gpu_hub_backend.team.entity.TeamCluster;
+import com.trucdnd.gpu_hub_backend.team.repository.TeamClusterRepository;
 import com.trucdnd.gpu_hub_backend.user.entity.User;
 import com.trucdnd.gpu_hub_backend.user.repository.UserRepository;
 import com.trucdnd.gpu_hub_backend.workload.dto.CreateWorkloadRequest;
 import com.trucdnd.gpu_hub_backend.workload.dto.WorkloadDto;
 import com.trucdnd.gpu_hub_backend.workload.entity.Workload;
 import com.trucdnd.gpu_hub_backend.workload.repository.WorkloadRepository;
+import io.fabric8.kubernetes.api.model.GenericKubernetesResource;
 import jakarta.persistence.EntityNotFoundException;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
 
 import com.trucdnd.gpu_hub_backend.common.constants.Workload.Type;
-import com.trucdnd.gpu_hub_backend.common.constants.Workload.Type.*;
 import com.trucdnd.gpu_hub_backend.common.utils.RandomK8sResourceNameGenerator;
 
 import java.math.BigDecimal;
@@ -29,6 +32,9 @@ public class WorkloadService {
     private final ProjectRepository projectRepository;
     private final ClusterRepository clusterRepository;
     private final UserRepository userRepository;
+    private final TeamClusterRepository teamClusterRepository;
+    private final NotebookService notebookService;
+    private final NotebookSpecBuilder notebookSpecBuilder;
     private final RandomK8sResourceNameGenerator suffixGenerator;
 
     public List<WorkloadDto> findAll() {
@@ -48,7 +54,15 @@ public class WorkloadService {
         entity.setStatus(com.trucdnd.gpu_hub_backend.common.constants.Workload.Status.QUEUED);
         entity.setK8sResourceKind(convertToResourceKind(entity));
         entity.setK8sResourceName(buildWorkloadName(entity));
-        return toDto(workloadRepository.save(entity));
+        TeamCluster teamCluster = teamClusterRepository
+                .findByTeam_IdAndCluster_Id(entity.getProject().getTeam().getId(), entity.getCluster().getId())
+                .orElseThrow(() -> new EntityNotFoundException(
+                        "TeamCluster not found for team=" + entity.getProject().getTeam().getId()
+                                + " cluster=" + entity.getCluster().getId()));
+        entity.setK8sNamespace(teamCluster.getNamespace());
+        Workload saved = workloadRepository.save(entity);
+        submit(saved);
+        return toDto(saved);
     }
 
     public void delete(UUID id) {
@@ -147,6 +161,9 @@ public class WorkloadService {
     }
 
     private void submit(Workload workload) {
-        
+        if (workload.getWorkloadType() == Type.NOTEBOOK) {
+            GenericKubernetesResource notebook = notebookSpecBuilder.build(workload, workload.getK8sNamespace());
+            notebookService.create(workload.getCluster(), notebook);
+        }
     }
 }
