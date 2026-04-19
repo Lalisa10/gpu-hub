@@ -7,18 +7,54 @@ import { ConfirmDialog } from '@/components/shared/confirm-dialog';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import {
+  Sheet,
+  SheetContent,
+  SheetFooter,
+  SheetHeader,
+  SheetTitle,
+} from '@/components/ui/sheet';
+import {
   Dialog,
   DialogContent,
   DialogHeader,
   DialogTitle,
 } from '@/components/ui/dialog';
 import { useAuth } from '@/contexts/auth-context';
-import { useWorkloads, usePatchWorkload, useDeleteWorkload } from '@/api/hooks/use-workloads';
+import {
+  useWorkloads,
+  usePatchWorkload,
+  useDeleteWorkload,
+  useWorkloadPods,
+  useWorkloadPodLogs,
+} from '@/api/hooks/use-workloads';
 import { useProjects } from '@/api/hooks/use-projects';
 import { useClusters } from '@/api/hooks/use-clusters';
-import type { WorkloadDto, WorkloadStatus } from '@/api/types';
+import type { PodDto, WorkloadDto, WorkloadStatus } from '@/api/types';
 import type { Column } from '@/components/shared/data-table';
-import { Plus, Trash2, Square, Eye, ExternalLink } from 'lucide-react';
+import {
+  Plus,
+  Trash2,
+  Square,
+  Eye,
+  ExternalLink,
+  Loader2,
+  Terminal,
+  FileText,
+  Server,
+} from 'lucide-react';
+
+function podStatusVariant(status: string | null): 'default' | 'secondary' | 'outline' | 'destructive' {
+  if (!status) return 'outline';
+  if (status === 'Running') return 'default';
+  if (['Failed', 'Error', 'CrashLoopBackOff', 'ImagePullBackOff', 'ErrImagePull'].includes(status))
+    return 'destructive';
+  return 'secondary';
+}
+
+function podIsTransient(status: string | null): boolean {
+  if (!status) return true;
+  return ['Pending', 'ContainerCreating', 'PodInitializing', 'Terminating'].includes(status);
+}
 
 export default function WorkloadListPage() {
   const { user, isAdmin, teamMemberships } = useAuth();
@@ -31,8 +67,14 @@ export default function WorkloadListPage() {
 
   const [deleteTarget, setDeleteTarget] = useState<WorkloadDto | null>(null);
   const [detailTarget, setDetailTarget] = useState<WorkloadDto | null>(null);
+  const [logsTarget, setLogsTarget] = useState<{ workloadId: string; podName: string } | null>(null);
 
-  // Filter workloads: admin sees all, others see their own + team workloads
+  const {
+    data: pods = [],
+    isLoading: podsLoading,
+    isError: podsError,
+  } = useWorkloadPods(detailTarget?.id ?? null);
+
   const myTeamIds = teamMemberships.map((m) => m.teamId);
   const myProjectIds = projects.filter((p) => myTeamIds.includes(p.teamId)).map((p) => p.id);
   const workloads = isAdmin
@@ -41,13 +83,12 @@ export default function WorkloadListPage() {
         (w) => w.submittedById === user?.id || myProjectIds.includes(w.projectId),
       );
 
-  const projectName = (id: string) => projects.find((p) => p.id === id)?.name ?? id.slice(0, 8);
-  const clusterName = (id: string) => clusters.find((c) => c.id === id)?.name ?? id.slice(0, 8);
+  const projectName = (id: string) => projects.find((p) => p.id === id)?.name ?? '—';
+  const clusterName = (id: string) => clusters.find((c) => c.id === id)?.name ?? '—';
   const typeName = (value: string) => value.replace(/_/g, ' ');
 
   const canStop = (w: WorkloadDto) =>
-    ['pending', 'queued', 'running'].includes(w.status) &&
-    (isAdmin || w.submittedById === user?.id);
+    ['pending', 'running'].includes(w.status) && (isAdmin || w.submittedById === user?.id);
 
   const handleStop = (w: WorkloadDto) => {
     patchWorkload.mutate({ id: w.id, data: { status: 'cancelled' } });
@@ -96,6 +137,7 @@ export default function WorkloadListPage() {
   ];
 
   const detailExtra = detailTarget ? parseExtra(detailTarget.extra) : null;
+  const activePodCount = pods.filter((p) => p.phase === 'Running' || podIsTransient(p.status)).length;
 
   return (
     <div>
@@ -111,105 +153,167 @@ export default function WorkloadListPage() {
 
       <DataTable columns={columns} data={workloads} isLoading={isLoading} />
 
-      {/* Detail / Info Dialog */}
-      <Dialog open={!!detailTarget} onOpenChange={() => setDetailTarget(null)}>
-        <DialogContent className="max-w-lg">
-          <DialogHeader>
-            <DialogTitle>Workload: {detailTarget?.name}</DialogTitle>
-          </DialogHeader>
-          {detailTarget && (
-            <div className="space-y-4 text-sm">
-              <div className="grid grid-cols-2 gap-2">
-                <div>
-                  <span className="text-muted-foreground">Status:</span>{' '}
-                  <WorkloadStatusBadge status={detailTarget.status as WorkloadStatus} />
-                </div>
-                <div>
-                  <span className="text-muted-foreground">Project:</span>{' '}
-                  {projectName(detailTarget.projectId)}
-                </div>
-                <div>
-                  <span className="text-muted-foreground">Cluster:</span>{' '}
-                  {clusterName(detailTarget.clusterId)}
-                </div>
-                <div>
-                  <span className="text-muted-foreground">GPU:</span> {detailTarget.requestedGpu}
-                </div>
-                <div>
-                  <span className="text-muted-foreground">CPU:</span> {detailTarget.requestedCpu}
-                </div>
-                <div>
-                  <span className="text-muted-foreground">Memory:</span>{' '}
-                  {detailTarget.requestedMemory} MiB
-                </div>
-                <div>
-                  <span className="text-muted-foreground">Type:</span>{' '}
-                  {typeName(detailTarget.workloadType)}
-                </div>
+      {/* Slide-over detail panel */}
+      <Sheet open={!!detailTarget} onOpenChange={(o) => !o && setDetailTarget(null)}>
+        <SheetContent
+          side="right"
+          className="flex flex-col gap-0 p-0 data-[side=right]:w-full data-[side=right]:sm:max-w-none data-[side=right]:md:w-2/5 data-[side=right]:md:min-w-[540px]"
+        >
+          <SheetHeader className="border-b px-6 py-5">
+            <SheetTitle className="text-lg">
+              Details for Workload:{' '}
+              <span className="text-muted-foreground">{detailTarget?.name}</span>
+            </SheetTitle>
+            {detailTarget && (
+              <div className="mt-2 flex flex-wrap items-center gap-2 text-xs">
+                <WorkloadStatusBadge status={detailTarget.status as WorkloadStatus} />
+                <Badge variant="outline">{typeName(detailTarget.workloadType)}</Badge>
+                <span className="text-muted-foreground">
+                  {projectName(detailTarget.projectId)} / {clusterName(detailTarget.clusterId)}
+                </span>
               </div>
+            )}
+          </SheetHeader>
 
-              {detailTarget.k8sNamespace && (
-                <div>
-                  <span className="text-muted-foreground">K8s:</span>{' '}
-                  {detailTarget.k8sNamespace}/{detailTarget.k8sResourceName} ({detailTarget.k8sResourceKind})
+          {detailTarget && (
+            <div className="flex-1 space-y-6 overflow-y-auto px-6 py-5 text-sm">
+              {/* Summary grid */}
+              <section>
+                <div className="grid grid-cols-3 gap-3">
+                  <SummaryStat label="GPU" value={String(detailTarget.requestedGpu)} />
+                  <SummaryStat label="CPU" value={String(detailTarget.requestedCpu)} />
+                  <SummaryStat label="Memory" value={`${detailTarget.requestedMemory} MiB`} />
                 </div>
-              )}
+                {(detailTarget.startedAt || detailTarget.finishedAt) && (
+                  <div className="mt-3 grid grid-cols-2 gap-3 text-xs text-muted-foreground">
+                    {detailTarget.startedAt && (
+                      <div>
+                        <div className="uppercase tracking-wide text-[10px]">Started</div>
+                        <div className="text-foreground">
+                          {new Date(detailTarget.startedAt).toLocaleString()}
+                        </div>
+                      </div>
+                    )}
+                    {detailTarget.finishedAt && (
+                      <div>
+                        <div className="uppercase tracking-wide text-[10px]">Finished</div>
+                        <div className="text-foreground">
+                          {new Date(detailTarget.finishedAt).toLocaleString()}
+                        </div>
+                      </div>
+                    )}
+                  </div>
+                )}
+              </section>
 
-              {detailTarget.startedAt && (
-                <div>
-                  <span className="text-muted-foreground">Started:</span>{' '}
-                  {new Date(detailTarget.startedAt).toLocaleString()}
+              {/* Pods */}
+              <section>
+                <div className="mb-3 flex items-center justify-between">
+                  <h3 className="font-heading text-sm font-medium">Associated Pods</h3>
+                  <Badge variant="outline" className="text-xs">
+                    {podsLoading ? '...' : `Pods (${activePodCount} Active)`}
+                  </Badge>
                 </div>
-              )}
 
-              {detailTarget.finishedAt && (
-                <div>
-                  <span className="text-muted-foreground">Finished:</span>{' '}
-                  {new Date(detailTarget.finishedAt).toLocaleString()}
-                </div>
-              )}
+                {podsLoading ? (
+                  <div className="flex items-center gap-2 rounded-md border border-dashed px-4 py-6 text-xs text-muted-foreground">
+                    <Loader2 className="h-4 w-4 animate-spin" />
+                    Loading pods...
+                  </div>
+                ) : podsError ? (
+                  <div className="rounded-md border border-dashed px-4 py-6 text-xs text-destructive">
+                    Failed to load pods.
+                  </div>
+                ) : pods.length === 0 ? (
+                  <div className="rounded-md border border-dashed px-4 py-6 text-center text-xs text-muted-foreground">
+                    No pods yet. The workload may still be scheduling.
+                  </div>
+                ) : (
+                  <ul className="space-y-2">
+                    {pods.map((pod) => (
+                      <PodCard
+                        key={pod.name}
+                        pod={pod}
+                        onViewLogs={() =>
+                          setLogsTarget({ workloadId: detailTarget.id, podName: pod.name })
+                        }
+                      />
+                    ))}
+                  </ul>
+                )}
+              </section>
 
-              {/* Extra info - Notebook URL or LLM curl example */}
+              {/* Extra info */}
               {detailExtra && (
-                <div className="rounded-md bg-muted p-3">
-                  <p className="mb-2 font-medium">Extra Info</p>
-                  {detailExtra.dockerImage != null && (
-                    <div className="mb-1">
-                      <Badge variant="outline">Notebook</Badge>
-                      {detailTarget.status === 'running' && detailExtra.jupyterUrl != null && (
-                        <a
-                          href={String(detailExtra.jupyterUrl)}
-                          target="_blank"
-                          rel="noopener noreferrer"
-                          className="ml-2 inline-flex items-center gap-1 text-blue-600 underline"
-                        >
-                          Open JupyterLab <ExternalLink className="h-3 w-3" />
-                        </a>
-                      )}
-                    </div>
-                  )}
-                  {detailExtra.modelSource != null && (
-                    <div className="mb-1">
-                      <Badge variant="outline">LLM Inference</Badge>
-                      <p className="mt-1">Model: {String(detailExtra.modelSource)}</p>
-                      {detailTarget.status === 'running' && (
-                        <pre className="mt-2 overflow-x-auto rounded bg-background p-2 text-xs">
-{`curl http://<node-ip>:${String(detailExtra.nodePort)}/v1/completions \\
-  -H "Content-Type: application/json" \\${detailExtra.apiKey ? `\n  -H "Authorization: Bearer ${String(detailExtra.apiKey)}" \\` : ''}
-  -d '{"model": "${String(detailExtra.modelSource)}", "prompt": "Hello", "max_tokens": 128}'`}
-                        </pre>
-                      )}
-                    </div>
-                  )}
-                  {!detailExtra.dockerImage && !detailExtra.modelSource && (
-                    <pre className="overflow-x-auto text-xs">{JSON.stringify(detailExtra, null, 2)}</pre>
-                  )}
-                </div>
+                <section>
+                  <h3 className="mb-2 font-heading text-sm font-medium">Extra Info</h3>
+                  <div className="rounded-md bg-muted p-3">
+                    {detailExtra.dockerImage != null && (
+                      <div className="mb-1">
+                        <Badge variant="outline">Notebook</Badge>
+                        {detailTarget.status === 'running' && detailExtra.jupyterUrl != null && (
+                          <a
+                            href={String(detailExtra.jupyterUrl)}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            className="ml-2 inline-flex items-center gap-1 text-blue-600 underline"
+                          >
+                            Open JupyterLab <ExternalLink className="h-3 w-3" />
+                          </a>
+                        )}
+                      </div>
+                    )}
+                    {detailExtra.modelSource != null && (
+                      <div className="mb-1">
+                        <Badge variant="outline">LLM Inference</Badge>
+                        <p className="mt-1">Model: {String(detailExtra.modelSource)}</p>
+                      </div>
+                    )}
+                    {!detailExtra.dockerImage && !detailExtra.modelSource && (
+                      <pre className="overflow-x-auto text-xs">
+                        {JSON.stringify(detailExtra, null, 2)}
+                      </pre>
+                    )}
+                  </div>
+                </section>
               )}
             </div>
           )}
-        </DialogContent>
-      </Dialog>
+
+          {detailTarget && (
+            <SheetFooter className="border-t px-6 py-4">
+              <div className="flex justify-end gap-2">
+                <Button
+                  variant="outline"
+                  size="sm"
+                  disabled
+                  title="Terminal access not yet available"
+                >
+                  <Terminal className="mr-1.5 h-4 w-4" /> Launch Terminal
+                </Button>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  disabled={pods.length === 0}
+                  onClick={() => {
+                    if (pods[0]) {
+                      setLogsTarget({ workloadId: detailTarget.id, podName: pods[0].name });
+                    }
+                  }}
+                >
+                  <FileText className="mr-1.5 h-4 w-4" /> View Logs
+                </Button>
+              </div>
+            </SheetFooter>
+          )}
+        </SheetContent>
+      </Sheet>
+
+      {/* Logs dialog */}
+      <LogsDialog
+        target={logsTarget}
+        onClose={() => setLogsTarget(null)}
+      />
 
       <ConfirmDialog
         open={!!deleteTarget}
@@ -225,5 +329,90 @@ export default function WorkloadListPage() {
         loading={deleteWorkload.isPending}
       />
     </div>
+  );
+}
+
+function SummaryStat({ label, value }: { label: string; value: string }) {
+  return (
+    <div className="rounded-md border bg-background px-3 py-2">
+      <div className="text-[10px] uppercase tracking-wide text-muted-foreground">{label}</div>
+      <div className="mt-0.5 font-mono text-sm">{value}</div>
+    </div>
+  );
+}
+
+function PodCard({ pod, onViewLogs }: { pod: PodDto; onViewLogs: () => void }) {
+  const transient = podIsTransient(pod.status);
+  return (
+    <li className="group rounded-md border bg-background px-3 py-2.5">
+      <div className="flex items-center justify-between gap-3">
+        <div className="flex min-w-0 items-center gap-2">
+          <Server className="h-4 w-4 shrink-0 text-muted-foreground" />
+          <div className="min-w-0">
+            <div className="truncate font-mono text-xs font-medium">{pod.name}</div>
+            <div className="text-[11px] text-muted-foreground">
+              IP: {pod.ip ?? '—'}
+              {pod.restartCount > 0 && (
+                <span className="ml-2">· restarts: {pod.restartCount}</span>
+              )}
+            </div>
+          </div>
+        </div>
+        <div className="flex shrink-0 items-center gap-2">
+          <Badge variant={podStatusVariant(pod.status)} className="gap-1 text-[10px]">
+            {transient && <Loader2 className="h-3 w-3 animate-spin" />}
+            {pod.status ?? 'Unknown'}
+          </Badge>
+          <Button
+            variant="ghost"
+            size="sm"
+            className="h-7 px-2 opacity-0 transition group-hover:opacity-100"
+            onClick={onViewLogs}
+          >
+            <FileText className="h-3.5 w-3.5" />
+          </Button>
+        </div>
+      </div>
+    </li>
+  );
+}
+
+function LogsDialog({
+  target,
+  onClose,
+}: {
+  target: { workloadId: string; podName: string } | null;
+  onClose: () => void;
+}) {
+  const { data, isLoading, isError, error } = useWorkloadPodLogs(
+    target?.workloadId ?? null,
+    target?.podName ?? null,
+  );
+
+  return (
+    <Dialog open={!!target} onOpenChange={(o) => !o && onClose()}>
+      <DialogContent className="w-[90vw] sm:max-w-[96rem]">
+        <DialogHeader>
+          <DialogTitle className="font-mono text-sm">
+            Logs · {target?.podName}
+          </DialogTitle>
+        </DialogHeader>
+        {isLoading && (
+          <div className="flex items-center gap-2 text-xs text-muted-foreground">
+            <Loader2 className="h-4 w-4 animate-spin" /> Fetching logs...
+          </div>
+        )}
+        {isError && (
+          <div className="text-xs text-destructive">
+            {error instanceof Error ? error.message : 'Failed to fetch logs.'}
+          </div>
+        )}
+        {!isLoading && !isError && (
+          <pre className="max-h-[90vh] overflow-auto rounded-md bg-muted p-3 text-xs">
+            {data && data.length > 0 ? data : '(no output)'}
+          </pre>
+        )}
+      </DialogContent>
+    </Dialog>
   );
 }

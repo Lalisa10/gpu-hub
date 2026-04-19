@@ -4,6 +4,8 @@ import com.trucdnd.gpu_hub_backend.common.constants.Team.TeamRole;
 import com.trucdnd.gpu_hub_backend.common.constants.User.GlobalRole;
 import com.trucdnd.gpu_hub_backend.project.repository.ProjectRepository;
 import com.trucdnd.gpu_hub_backend.team.repository.TeamMemberRepository;
+import com.trucdnd.gpu_hub_backend.workload.entity.Workload;
+import com.trucdnd.gpu_hub_backend.workload.repository.WorkloadRepository;
 import jakarta.persistence.EntityNotFoundException;
 import org.springframework.security.core.Authentication;
 import org.springframework.security.core.context.SecurityContextHolder;
@@ -16,10 +18,14 @@ public class RbacService {
 
     private final TeamMemberRepository teamMemberRepository;
     private final ProjectRepository projectRepository;
+    private final WorkloadRepository workloadRepository;
 
-    public RbacService(TeamMemberRepository teamMemberRepository, ProjectRepository projectRepository) {
+    public RbacService(TeamMemberRepository teamMemberRepository,
+                       ProjectRepository projectRepository,
+                       WorkloadRepository workloadRepository) {
         this.teamMemberRepository = teamMemberRepository;
         this.projectRepository = projectRepository;
+        this.workloadRepository = workloadRepository;
     }
 
     public boolean canManageTeam(UUID teamId) {
@@ -72,6 +78,20 @@ public class RbacService {
         UUID teamId = projectRepository.findTeamIdByProjectId(projectId)
                 .orElseThrow(() -> new EntityNotFoundException("Project not found with id: " + projectId));
         return teamMemberRepository.existsById_UserIdAndId_TeamId(currentUserId, teamId);
+    }
+
+    public boolean canAccessWorkload(UUID workloadId) {
+        if (isAdmin()) return true;
+        UUID currentUserId = currentUserId();
+
+        Workload workload = workloadRepository.findById(workloadId)
+                .orElseThrow(() -> new EntityNotFoundException("Workload not found: " + workloadId));
+
+        if (workload.getSubmittedBy().getId().equals(currentUserId)) return true;
+
+        UUID teamId = projectRepository.findTeamIdByProjectId(workload.getProject().getId())
+                .orElseThrow(() -> new EntityNotFoundException("Project not found for workload: " + workloadId));
+        return teamMemberRepository.existsById_UserIdAndId_TeamIdAndRole(currentUserId, teamId, TeamRole.TEAM_LEAD);
     }
 
     private UUID currentUserId() {

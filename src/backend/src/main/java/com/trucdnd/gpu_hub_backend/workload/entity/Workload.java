@@ -6,8 +6,6 @@ import com.trucdnd.gpu_hub_backend.project.entity.Project;
 import com.trucdnd.gpu_hub_backend.user.entity.User;
 import jakarta.persistence.Column;
 import jakarta.persistence.Entity;
-import jakarta.persistence.EnumType;
-import jakarta.persistence.Enumerated;
 import jakarta.persistence.JoinColumn;
 import jakarta.persistence.ManyToOne;
 import jakarta.persistence.Table;
@@ -44,12 +42,13 @@ public class Workload extends MutableEntity {
     private User submittedBy;
 
     @Column(name = "workload_type", nullable = false)
-    @Enumerated(EnumType.STRING)
     private com.trucdnd.gpu_hub_backend.common.constants.Workload.Type workloadType;
 
     @Column(name = "priority_class", nullable = false)
-    @Enumerated(EnumType.STRING)
     private com.trucdnd.gpu_hub_backend.common.constants.Workload.PriorityClass priorityClass;
+
+    @Column(name = "image", nullable = false)
+    private String image;
 
     @Column(name = "name", nullable = false)
     private String name;
@@ -60,27 +59,11 @@ public class Workload extends MutableEntity {
     @Column(name = "requested_cpu", nullable = false, precision = 10, scale = 2)
     private BigDecimal requestedCpu;
 
-    @Column(name = "requested_cpu_limit", nullable = false, precision = 10, scale = 2)
-    private BigDecimal requestedCpuLimit;
-
     @Column(name = "requested_memory", nullable = false)
     private Long requestedMemory;
 
-    @Column(name = "requested_memory_limit", nullable = false)
-    private Long requestedMemoryLimit;
-
     @Column(name = "status", nullable = false)
-    @Enumerated(EnumType.STRING)
     private com.trucdnd.gpu_hub_backend.common.constants.Workload.Status status;
-
-    @Column(name = "k8s_namespace")
-    private String k8sNamespace;
-
-    @Column(name = "k8s_resource_name")
-    private String k8sResourceName;
-
-    @Column(name = "k8s_resource_kind")
-    private String k8sResourceKind;
 
     @Column(name = "queued_at")
     private OffsetDateTime queuedAt;

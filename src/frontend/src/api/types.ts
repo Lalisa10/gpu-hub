@@ -20,7 +20,6 @@ export type TeamRole = 'MEMBER' | 'TEAM_LEAD';
 export type ClusterStatus = 'ACTIVE' | 'INACTIVE' | 'MAINTENANCE';
 export type WorkloadStatus =
   | 'pending'
-  | 'queued'
   | 'running'
   | 'succeeded'
   | 'failed'
@@ -222,16 +221,12 @@ export interface WorkloadDto {
   submittedById: string;
   workloadType: string;
   priorityClass: string;
+  image: string,
   name: string;
   requestedGpu: number;
   requestedCpu: number;
-  requestedCpuLimit: number;
   requestedMemory: number;
-  requestedMemoryLimit: number;
   status: WorkloadStatus;
-  k8sNamespace: string | null;
-  k8sResourceName: string | null;
-  k8sResourceKind: string | null;
   queuedAt: string | null;
   startedAt: string | null;
   finishedAt: string | null;
@@ -245,18 +240,24 @@ export interface CreateWorkloadRequest {
   clusterId: string;
   submittedById: string;
   workloadType: string;
-  priorityClass: string;
   name: string;
+  image: string;
   requestedGpu: number;
   requestedCpu: number;
-  requestedCpuLimit: number;
   requestedMemory: number;
-  requestedMemoryLimit: number;
-  status: string;
-  k8sNamespace?: string;
-  k8sResourceName?: string;
-  k8sResourceKind?: string;
   extra?: string;
+}
+
+// ─── Pod ───────────────────────────────────────────────
+export interface PodDto {
+  name: string;
+  ip: string | null;
+  nodeName: string | null;
+  phase: string | null;
+  status: string | null;
+  ready: boolean;
+  restartCount: number;
+  startTime: string | null;
 }
 
 // ─── API Error ─────────────────────────────────────────

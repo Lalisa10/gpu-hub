@@ -43,8 +43,8 @@ public class TeamClusterService {
 
     public TeamClusterDto create(CreateTeamClusterRequest request) {
         TeamCluster teamCluster = new TeamCluster();
-        apply(teamCluster, request.teamId(), request.clusterId(), request.policyId(), request.namespace());
-        //kubernetesService.createNamespace(cluster, request.namespace());
+        apply(teamCluster, request.teamId(), request.clusterId(), request.policyId());
+        kubernetesService.createNamespace(teamCluster.getCluster(), teamCluster.getNamespace());
         queueService.create(teamCluster.getCluster(), queueSpecBuilder.buildTeamQueue(teamCluster));
 
         return toDto(teamClusterRepository.save(teamCluster));
@@ -52,7 +52,7 @@ public class TeamClusterService {
 
     public TeamClusterDto update(UUID id, UpdateTeamClusterRequest request) {
         TeamCluster teamCluster = getTeamCluster(id);
-        apply(teamCluster, request.teamId(), request.clusterId(), request.policyId(), teamCluster.getNamespace());
+        apply(teamCluster, request.teamId(), request.clusterId(), request.policyId());
         return toDto(teamClusterRepository.save(teamCluster));
     }
 
@@ -68,7 +68,7 @@ public class TeamClusterService {
         kubernetesService.deleteNamespace(cluster, teamCluster.getNamespace());
     }
 
-    private void apply(TeamCluster target, UUID teamId, UUID clusterId, UUID policyId, String namespace) {
+    private void apply(TeamCluster target, UUID teamId, UUID clusterId, UUID policyId) {
         Team team = teamRepository.findById(teamId)
                 .orElseThrow(() -> new EntityNotFoundException("Team not found with id: " + teamId));
         Cluster cluster = clusterRepository.findById(clusterId)
@@ -83,13 +83,18 @@ public class TeamClusterService {
         target.setTeam(team);
         target.setCluster(cluster);
         target.setPolicy(policy);
-        String normalizedNamespace = namespace == null ? "" : namespace.trim();
-        if (!isValidKubernetesName(normalizedNamespace)) {
-            throw new IllegalArgumentException(
-                    "Invalid namespace name '" + normalizedNamespace + "'. Namespace must match Kubernetes DNS-1123 label format: lowercase alphanumeric or '-', must start/end with alphanumeric, max 63 chars."
-            );
-        }
-        target.setNamespace(normalizedNamespace);
+        target.setNamespace(buildNamespace(team.getName()));
+    }
+
+    /** Generates the K8s namespace: {@code gpuhub-team-<sanitized-team-name>}. */
+    static String buildNamespace(String teamName) {
+        String sanitized = teamName.toLowerCase()
+                .replaceAll("[^a-z0-9]+", "-")
+                .replaceAll("^-+|-+$", "");
+        String prefix = "gpuhub-team-";
+        int maxSuffix = 63 - prefix.length();
+        if (sanitized.length() > maxSuffix) sanitized = sanitized.substring(0, maxSuffix);
+        return prefix + sanitized;
     }
 
     private TeamCluster getTeamCluster(UUID id) {
@@ -107,12 +112,5 @@ public class TeamClusterService {
                 entity.getCreatedAt(),
                 entity.getUpdatedAt()
         );
-    }
-
-    private boolean isValidKubernetesName(String value) {
-        return value != null
-                && !value.isBlank()
-                && value.length() <= 63
-                && value.matches("^[a-z0-9]([-a-z0-9]*[a-z0-9])?$");
     }
 }

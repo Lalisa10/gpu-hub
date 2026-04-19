@@ -5,6 +5,8 @@ import type { CreateWorkloadRequest } from '../types';
 const KEYS = {
   all: ['workloads'] as const,
   detail: (id: string) => ['workloads', id] as const,
+  pods: (id: string) => ['workloads', id, 'pods'] as const,
+  logs: (id: string, podName: string) => ['workloads', id, 'pods', podName, 'logs'] as const,
 };
 
 export const useWorkloads = () =>
@@ -42,3 +44,19 @@ export const useDeleteWorkload = () => {
     onSuccess: () => qc.invalidateQueries({ queryKey: KEYS.all }),
   });
 };
+
+export const useWorkloadPods = (id: string | null) =>
+  useQuery({
+    queryKey: KEYS.pods(id ?? ''),
+    queryFn: () => workloadService.getPods(id!),
+    enabled: !!id,
+    refetchInterval: 5_000,
+  });
+
+export const useWorkloadPodLogs = (id: string | null, podName: string | null) =>
+  useQuery({
+    queryKey: KEYS.logs(id ?? '', podName ?? ''),
+    queryFn: () => workloadService.getPodLogs(id!, podName!),
+    enabled: !!id && !!podName,
+    refetchInterval: 5_000,
+  });

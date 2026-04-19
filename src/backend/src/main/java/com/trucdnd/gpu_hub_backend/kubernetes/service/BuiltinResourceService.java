@@ -11,11 +11,14 @@ import com.trucdnd.gpu_hub_backend.kubernetes.factory.KubernetesClientFactory;
 
 import io.fabric8.kubernetes.api.model.Namespace;
 import io.fabric8.kubernetes.api.model.NamespaceBuilder;
+import io.fabric8.kubernetes.api.model.Pod;
 import io.fabric8.kubernetes.api.model.apps.Deployment;
 import io.fabric8.kubernetes.client.KubernetesClient;
 import io.fabric8.kubernetes.client.KubernetesClientException;
 import io.fabric8.kubernetes.client.dsl.LogWatch;
 import lombok.RequiredArgsConstructor;
+
+import java.util.Map;
 
 @Service
 @RequiredArgsConstructor
@@ -82,6 +85,17 @@ public class BuiltinResourceService {
             client.apps().deployments().inNamespace(namespace).withName(deploymentName).delete();
         } catch (KubernetesClientException e) {
             throw k8sError("delete deployment '" + deploymentName + "' in namespace '" + namespace + "'", cluster, e);
+        }
+    }
+
+    // ── Pods ──────────────────────────────────────────────────────────────────
+
+    public List<Pod> listPodsByLabel(Cluster cluster, String namespace, Map<String, String> labels) {
+        try {
+            KubernetesClient client = clientFactory.createClient(cluster);
+            return client.pods().inNamespace(namespace).withLabels(labels).list().getItems();
+        } catch (KubernetesClientException e) {
+            throw k8sError("list pods by labels " + labels + " in namespace '" + namespace + "'", cluster, e);
         }
     }
 

@@ -1,6 +1,7 @@
 package com.trucdnd.gpu_hub_backend.workload.controller;
 
 import com.trucdnd.gpu_hub_backend.workload.dto.CreateWorkloadRequest;
+import com.trucdnd.gpu_hub_backend.workload.dto.PodInfoDto;
 import com.trucdnd.gpu_hub_backend.workload.dto.WorkloadDto;
 import com.trucdnd.gpu_hub_backend.workload.service.WorkloadService;
 import jakarta.validation.Valid;
@@ -43,5 +44,17 @@ public class WorkloadController {
     public ResponseEntity<Void> delete(@PathVariable UUID id) {
         workloadService.delete(id);
         return ResponseEntity.noContent().build();
+    }
+
+    @GetMapping("/{id}/pods")
+    @PreAuthorize("hasRole('ADMIN') or @rbac.canAccessWorkload(#id)")
+    public ResponseEntity<List<PodInfoDto>> listPods(@PathVariable UUID id) {
+        return ResponseEntity.ok(workloadService.listPods(id));
+    }
+
+    @GetMapping("/{id}/pods/{podName}/logs")
+    @PreAuthorize("hasRole('ADMIN') or @rbac.canAccessWorkload(#id)")
+    public ResponseEntity<String> getPodLogs(@PathVariable UUID id, @PathVariable String podName) {
+        return ResponseEntity.ok(workloadService.getPodLogs(id, podName));
     }
 }

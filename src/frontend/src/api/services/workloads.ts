@@ -1,5 +1,5 @@
 import client from '../client';
-import type { CreateWorkloadRequest, WorkloadDto } from '../types';
+import type { CreateWorkloadRequest, PodDto, WorkloadDto } from '../types';
 
 const URL = '/workloads';
 
@@ -11,4 +11,7 @@ export const workloadService = {
   patch: (id: string, data: Partial<WorkloadDto>) =>
     client.patch<WorkloadDto>(`${URL}/${id}`, data).then((r) => r.data),
   delete: (id: string) => client.delete(`${URL}/${id}`),
+  getPods: (id: string) => client.get<PodDto[]>(`${URL}/${id}/pods`).then((r) => r.data),
+  getPodLogs: (id: string, podName: string) =>
+    client.get<string>(`${URL}/${id}/pods/${podName}/logs`).then((r) => r.data),
 };

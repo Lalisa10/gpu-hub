@@ -155,24 +155,6 @@ BEFORE INSERT OR UPDATE ON projects
 FOR EACH ROW EXECUTE FUNCTION check_project_policy();
 
 -- ============================================================
--- WORKLOAD TYPES
--- ============================================================
-CREATE TABLE workload_types (
-    id                  UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-    name                VARCHAR(100) NOT NULL UNIQUE,   -- 'jupyter_notebook', 'llm_inference'
-    display_name        VARCHAR(100) NOT NULL,
-    description         TEXT,
-    priority_class      VARCHAR(20) NOT NULL DEFAULT 'train'
-                            CHECK (priority_class IN ('train', 'build-preemptible', 'build', 'inference')),
-    default_gpu         NUMERIC(10,2),
-    default_cpu         NUMERIC(10,2),
-    default_memory      BIGINT,                         -- MiB
-    is_active           BOOLEAN NOT NULL DEFAULT true,
-    created_at          TIMESTAMPTZ NOT NULL DEFAULT now(),
-    updated_at          TIMESTAMPTZ NOT NULL DEFAULT now()
-);
-
--- ============================================================
 -- WORKLOADS
 -- ============================================================
 CREATE TABLE workloads (
@@ -180,19 +162,22 @@ CREATE TABLE workloads (
     project_id          UUID NOT NULL REFERENCES projects(id),
     cluster_id          UUID NOT NULL REFERENCES clusters(id),
     submitted_by        UUID NOT NULL REFERENCES users(id),
-    workload_type_id    UUID NOT NULL REFERENCES workload_types(id),
+    workload_type    	VARCHAR(20) NOT NULL
+							CHECK (workload_type IN (
+								'notebook', 'llm_inference'
+							)),
+	priority_class      VARCHAR(20) NOT NULL DEFAULT 'train'
+                            CHECK (priority_class IN ('train', 'build-preemptible', 'build', 'inference')),
+	image				VARCHAR(100) NOT NULL, 
     name                VARCHAR(255) NOT NULL,
     requested_gpu       NUMERIC(10,2) NOT NULL DEFAULT 0,
     requested_cpu       NUMERIC(10,2) NOT NULL DEFAULT 0,
     requested_memory    BIGINT        NOT NULL DEFAULT 0,   -- MiB
     status              VARCHAR(30)   NOT NULL DEFAULT 'pending'
                             CHECK (status IN (
-                                'pending', 'queued', 'running',
+                                'pending', 'running',
                                 'succeeded', 'failed', 'preempted', 'cancelled'
                             )),
-    k8s_namespace       VARCHAR(63),
-    k8s_resource_name   VARCHAR(255),
-    k8s_resource_kind   VARCHAR(100),
     queued_at           TIMESTAMPTZ,
     started_at          TIMESTAMPTZ,
     finished_at         TIMESTAMPTZ,
@@ -249,7 +234,6 @@ CREATE INDEX idx_workloads_project         ON workloads(project_id);
 CREATE INDEX idx_workloads_cluster         ON workloads(cluster_id);
 CREATE INDEX idx_workloads_submitted_by    ON workloads(submitted_by);
 CREATE INDEX idx_workloads_status          ON workloads(status);
-CREATE INDEX idx_workloads_type            ON workloads(workload_type_id);
 CREATE INDEX idx_workloads_active          ON workloads(cluster_id, status)
     WHERE status IN ('pending', 'queued', 'running');
 CREATE INDEX idx_refresh_tokens_user       ON refresh_tokens(user_id);

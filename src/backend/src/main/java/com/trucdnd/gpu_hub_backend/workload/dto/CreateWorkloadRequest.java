@@ -12,14 +12,12 @@ public record CreateWorkloadRequest(
         @NotNull UUID projectId,
         @NotNull UUID clusterId,
         @NotNull UUID submittedById,
-        @NotBlank Type workloadType,
-        @NotBlank PriorityClass priorityClass,
+        @NotNull Type workloadType,
         @NotBlank String name,
+        @NotBlank String image,
         @NotNull BigDecimal requestedGpu,
         @NotNull BigDecimal requestedCpu,
-        @NotNull BigDecimal requestedCpuLimit,
         @NotNull Long requestedMemory,
-        @NotNull Long requestedMemoryLimit,
         String extra
 ) {
 }

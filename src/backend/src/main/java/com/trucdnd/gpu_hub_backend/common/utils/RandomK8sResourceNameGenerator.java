@@ -20,4 +20,13 @@ public class RandomK8sResourceNameGenerator {
             .mapToObj(c -> String.valueOf((char) c))
             .collect(Collectors.joining());
     }
+
+    /**
+     * Generates a K8s-safe resource name: {@code <username>-<resourceKind>-<5-char random>}.
+     * {@code resourceKind} should already be lowercase (e.g. "notebook", "deployment").
+     */
+    public String generateWorkloadName(String username, String resourceKind) {
+        String safeName = username.toLowerCase().replaceAll("[^a-z0-9]", "-");
+        return safeName + "-" + resourceKind + "-" + generateString(5);
+    }
 }
