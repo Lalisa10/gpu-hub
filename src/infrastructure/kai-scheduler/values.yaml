@@ -8,7 +8,7 @@ global:
   securityContext: {}
   imagePullSecrets: []
   leaderElection: false
-  gpuSharing: false
+  gpuSharing: true
   clusterAutoscaling: false
   nodeSelector: {}
   affinity: {}

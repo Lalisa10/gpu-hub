@@ -11,6 +11,7 @@ import com.trucdnd.gpu_hub_backend.kubernetes.factory.KubernetesClientFactory;
 
 import io.fabric8.kubernetes.api.model.Namespace;
 import io.fabric8.kubernetes.api.model.NamespaceBuilder;
+import io.fabric8.kubernetes.api.model.Node;
 import io.fabric8.kubernetes.api.model.Pod;
 import io.fabric8.kubernetes.api.model.apps.Deployment;
 import io.fabric8.kubernetes.client.KubernetesClient;
@@ -84,7 +85,19 @@ public class BuiltinResourceService {
             KubernetesClient client = clientFactory.createClient(cluster);
             client.apps().deployments().inNamespace(namespace).withName(deploymentName).delete();
         } catch (KubernetesClientException e) {
+            if (e.getCode() == 404) return;
             throw k8sError("delete deployment '" + deploymentName + "' in namespace '" + namespace + "'", cluster, e);
+        }
+    }
+
+    public void deleteDeploymentsByLabel(Cluster cluster, String namespace, String labelKey, String labelValue) {
+        try {
+            KubernetesClient client = clientFactory.createClient(cluster);
+            client.apps().deployments().inNamespace(namespace).withLabel(labelKey, labelValue).delete();
+        } catch (KubernetesClientException e) {
+            if (e.getCode() == 404) return;
+            throw k8sError("delete deployments by label " + labelKey + "=" + labelValue
+                    + " in namespace '" + namespace + "'", cluster, e);
         }
     }
 
@@ -137,6 +150,16 @@ public class BuiltinResourceService {
                     .inContainer(containerName).watchLog(out);
         } catch (KubernetesClientException e) {
             throw k8sError("watch pod logs for '" + podName + "/" + containerName + "' in namespace '" + namespace + "'", cluster, e);
+        }
+    }
+
+    // ── Nodes ─────────────────────────────────────────────────────────────────
+
+    public List<Node> listNodes(Cluster cluster) {
+        try {
+            return clientFactory.createClient(cluster).nodes().list().getItems();
+        } catch (KubernetesClientException e) {
+            throw k8sError("list nodes", cluster, e);
         }
     }
 

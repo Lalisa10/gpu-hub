@@ -8,8 +8,8 @@ export const workloadService = {
   getById: (id: string) => client.get<WorkloadDto>(`${URL}/${id}`).then((r) => r.data),
   create: (data: CreateWorkloadRequest) =>
     client.post<WorkloadDto>(URL, data).then((r) => r.data),
-  patch: (id: string, data: Partial<WorkloadDto>) =>
-    client.patch<WorkloadDto>(`${URL}/${id}`, data).then((r) => r.data),
+  cancel: (id: string) =>
+    client.post<WorkloadDto>(`${URL}/${id}/cancel`).then((r) => r.data),
   delete: (id: string) => client.delete(`${URL}/${id}`),
   getPods: (id: string) => client.get<PodDto[]>(`${URL}/${id}/pods`).then((r) => r.data),
   getPodLogs: (id: string, podName: string) =>

@@ -1,5 +1,5 @@
 import client from '../client';
-import type { ClusterDto, JoinClusterRequest, PatchClusterRequest } from '../types';
+import type { ClusterDetailsDto, ClusterDto, JoinClusterRequest, PatchClusterRequest } from '../types';
 
 const URL = '/clusters';
 
@@ -18,4 +18,6 @@ export const clusterService = {
     // Do NOT set Content-Type manually — Axios sets multipart/form-data with boundary automatically
     return client.post<ClusterDto>(`${URL}/${id}/kubeconfig`, form).then((r) => r.data);
   },
+  getDetails: (id: string) =>
+    client.get<ClusterDetailsDto>(`${URL}/${id}/details`).then((r) => r.data),
 };

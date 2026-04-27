@@ -22,15 +22,12 @@ import io.fabric8.kubernetes.api.model.ResourceRequirements;
 import io.fabric8.kubernetes.api.model.ResourceRequirementsBuilder;
 import io.fabric8.kubernetes.api.model.apps.Deployment;
 import io.fabric8.kubernetes.api.model.apps.DeploymentBuilder;
-import lombok.RequiredArgsConstructor;
-
 @Component
-@RequiredArgsConstructor
 public class DeploymentSpecBuilder {
 
     private static final int VLLM_CONTAINER_PORT = 8000;
 
-    private final ObjectMapper objectMapper;
+    private final ObjectMapper objectMapper = new ObjectMapper();
 
     public Deployment build(Workload workload, String k8sName, String namespace, String queueName) {
         LlmInferenceExtra extra = parseExtra(workload.getExtra());

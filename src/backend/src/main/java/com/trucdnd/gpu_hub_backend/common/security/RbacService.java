@@ -94,6 +94,10 @@ public class RbacService {
         return teamMemberRepository.existsById_UserIdAndId_TeamIdAndRole(currentUserId, teamId, TeamRole.TEAM_LEAD);
     }
 
+    public boolean canCancelWorkload(UUID workloadId) {
+        return canAccessWorkload(workloadId);
+    }
+
     private UUID currentUserId() {
         Authentication authentication = SecurityContextHolder.getContext().getAuthentication();
         if (authentication == null || !(authentication.getPrincipal() instanceof UserPrincipal principal)) {

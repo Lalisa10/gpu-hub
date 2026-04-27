@@ -22,10 +22,11 @@ import {
 import { useAuth } from '@/contexts/auth-context';
 import {
   useWorkloads,
-  usePatchWorkload,
+  useCancelWorkload,
   useDeleteWorkload,
-  useWorkloadPods,
-  useWorkloadPodLogs,
+  useWorkloadStatusStream,
+  useWorkloadPodsStream,
+  useWorkloadPodLogsStream,
 } from '@/api/hooks/use-workloads';
 import { useProjects } from '@/api/hooks/use-projects';
 import { useClusters } from '@/api/hooks/use-clusters';
@@ -62,7 +63,7 @@ export default function WorkloadListPage() {
   const { data: allWorkloads = [], isLoading } = useWorkloads();
   const { data: projects = [] } = useProjects();
   const { data: clusters = [] } = useClusters();
-  const patchWorkload = usePatchWorkload();
+  const cancelWorkload = useCancelWorkload();
   const deleteWorkload = useDeleteWorkload();
 
   const [deleteTarget, setDeleteTarget] = useState<WorkloadDto | null>(null);
@@ -70,10 +71,17 @@ export default function WorkloadListPage() {
   const [logsTarget, setLogsTarget] = useState<{ workloadId: string; podName: string } | null>(null);
 
   const {
-    data: pods = [],
+    data: streamedStatus,
+  } = useWorkloadStatusStream(detailTarget?.id ?? null, !!detailTarget);
+
+  const activeWorkload = streamedStatus ?? detailTarget;
+
+  const {
+    data: streamedPods,
     isLoading: podsLoading,
     isError: podsError,
-  } = useWorkloadPods(detailTarget?.id ?? null);
+  } = useWorkloadPodsStream(detailTarget?.id ?? null, !!detailTarget);
+  const pods = streamedPods ?? [];
 
   const myTeamIds = teamMemberships.map((m) => m.teamId);
   const myProjectIds = projects.filter((p) => myTeamIds.includes(p.teamId)).map((p) => p.id);
@@ -91,7 +99,7 @@ export default function WorkloadListPage() {
     ['pending', 'running'].includes(w.status) && (isAdmin || w.submittedById === user?.id);
 
   const handleStop = (w: WorkloadDto) => {
-    patchWorkload.mutate({ id: w.id, data: { status: 'cancelled' } });
+    cancelWorkload.mutate(w.id);
   };
 
   const parseExtra = (extra: string | null): Record<string, unknown> | null => {
@@ -136,7 +144,7 @@ export default function WorkloadListPage() {
     },
   ];
 
-  const detailExtra = detailTarget ? parseExtra(detailTarget.extra) : null;
+  const detailExtra = activeWorkload ? parseExtra(activeWorkload.extra) : null;
   const activePodCount = pods.filter((p) => p.phase === 'Running' || podIsTransient(p.status)).length;
 
   return (
@@ -162,43 +170,43 @@ export default function WorkloadListPage() {
           <SheetHeader className="border-b px-6 py-5">
             <SheetTitle className="text-lg">
               Details for Workload:{' '}
-              <span className="text-muted-foreground">{detailTarget?.name}</span>
+              <span className="text-muted-foreground">{activeWorkload?.name}</span>
             </SheetTitle>
-            {detailTarget && (
+            {activeWorkload && (
               <div className="mt-2 flex flex-wrap items-center gap-2 text-xs">
-                <WorkloadStatusBadge status={detailTarget.status as WorkloadStatus} />
-                <Badge variant="outline">{typeName(detailTarget.workloadType)}</Badge>
+                <WorkloadStatusBadge status={activeWorkload.status as WorkloadStatus} />
+                <Badge variant="outline">{typeName(activeWorkload.workloadType)}</Badge>
                 <span className="text-muted-foreground">
-                  {projectName(detailTarget.projectId)} / {clusterName(detailTarget.clusterId)}
+                  {projectName(activeWorkload.projectId)} / {clusterName(activeWorkload.clusterId)}
                 </span>
               </div>
             )}
           </SheetHeader>
 
-          {detailTarget && (
+          {activeWorkload && (
             <div className="flex-1 space-y-6 overflow-y-auto px-6 py-5 text-sm">
               {/* Summary grid */}
               <section>
                 <div className="grid grid-cols-3 gap-3">
-                  <SummaryStat label="GPU" value={String(detailTarget.requestedGpu)} />
-                  <SummaryStat label="CPU" value={String(detailTarget.requestedCpu)} />
-                  <SummaryStat label="Memory" value={`${detailTarget.requestedMemory} MiB`} />
+                  <SummaryStat label="GPU" value={String(activeWorkload.requestedGpu)} />
+                  <SummaryStat label="CPU" value={String(activeWorkload.requestedCpu)} />
+                  <SummaryStat label="Memory" value={`${activeWorkload.requestedMemory} MiB`} />
                 </div>
-                {(detailTarget.startedAt || detailTarget.finishedAt) && (
+                {(activeWorkload.startedAt || activeWorkload.finishedAt) && (
                   <div className="mt-3 grid grid-cols-2 gap-3 text-xs text-muted-foreground">
-                    {detailTarget.startedAt && (
+                    {activeWorkload.startedAt && (
                       <div>
                         <div className="uppercase tracking-wide text-[10px]">Started</div>
                         <div className="text-foreground">
-                          {new Date(detailTarget.startedAt).toLocaleString()}
+                          {new Date(activeWorkload.startedAt).toLocaleString()}
                         </div>
                       </div>
                     )}
-                    {detailTarget.finishedAt && (
+                    {activeWorkload.finishedAt && (
                       <div>
                         <div className="uppercase tracking-wide text-[10px]">Finished</div>
                         <div className="text-foreground">
-                          {new Date(detailTarget.finishedAt).toLocaleString()}
+                          {new Date(activeWorkload.finishedAt).toLocaleString()}
                         </div>
                       </div>
                     )}
@@ -235,7 +243,7 @@ export default function WorkloadListPage() {
                         key={pod.name}
                         pod={pod}
                         onViewLogs={() =>
-                          setLogsTarget({ workloadId: detailTarget.id, podName: pod.name })
+                          setLogsTarget({ workloadId: activeWorkload.id, podName: pod.name })
                         }
                       />
                     ))}
@@ -251,7 +259,7 @@ export default function WorkloadListPage() {
                     {detailExtra.dockerImage != null && (
                       <div className="mb-1">
                         <Badge variant="outline">Notebook</Badge>
-                        {detailTarget.status === 'running' && detailExtra.jupyterUrl != null && (
+                        {activeWorkload.status === 'running' && detailExtra.jupyterUrl != null && (
                           <a
                             href={String(detailExtra.jupyterUrl)}
                             target="_blank"
@@ -280,7 +288,7 @@ export default function WorkloadListPage() {
             </div>
           )}
 
-          {detailTarget && (
+          {activeWorkload && (
             <SheetFooter className="border-t px-6 py-4">
               <div className="flex justify-end gap-2">
                 <Button
@@ -297,7 +305,7 @@ export default function WorkloadListPage() {
                   disabled={pods.length === 0}
                   onClick={() => {
                     if (pods[0]) {
-                      setLogsTarget({ workloadId: detailTarget.id, podName: pods[0].name });
+                      setLogsTarget({ workloadId: activeWorkload.id, podName: pods[0].name });
                     }
                   }}
                 >
@@ -384,9 +392,10 @@ function LogsDialog({
   target: { workloadId: string; podName: string } | null;
   onClose: () => void;
 }) {
-  const { data, isLoading, isError, error } = useWorkloadPodLogs(
+  const { data, isLoading, isError } = useWorkloadPodLogsStream(
     target?.workloadId ?? null,
     target?.podName ?? null,
+    !!target,
   );
 
   return (
@@ -403,9 +412,7 @@ function LogsDialog({
           </div>
         )}
         {isError && (
-          <div className="text-xs text-destructive">
-            {error instanceof Error ? error.message : 'Failed to fetch logs.'}
-          </div>
+          <div className="text-xs text-destructive">Failed to fetch logs.</div>
         )}
         {!isLoading && !isError && (
           <pre className="max-h-[90vh] overflow-auto rounded-md bg-muted p-3 text-xs">

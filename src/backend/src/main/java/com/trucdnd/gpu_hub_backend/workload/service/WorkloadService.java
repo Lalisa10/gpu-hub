@@ -14,6 +14,7 @@ import com.trucdnd.gpu_hub_backend.workload.dto.CreateWorkloadRequest;
 import com.trucdnd.gpu_hub_backend.workload.dto.PodInfoDto;
 import com.trucdnd.gpu_hub_backend.workload.dto.WorkloadDto;
 import com.trucdnd.gpu_hub_backend.workload.entity.Workload;
+import com.trucdnd.gpu_hub_backend.workload.event.WorkloadStatusChangedEvent;
 import com.trucdnd.gpu_hub_backend.workload.repository.WorkloadRepository;
 import io.fabric8.kubernetes.api.model.ContainerStatus;
 import io.fabric8.kubernetes.api.model.GenericKubernetesResource;
@@ -21,7 +22,9 @@ import io.fabric8.kubernetes.api.model.Pod;
 import io.fabric8.kubernetes.api.model.apps.Deployment;
 import jakarta.persistence.EntityNotFoundException;
 import lombok.RequiredArgsConstructor;
+import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
 
 import com.trucdnd.gpu_hub_backend.common.constants.Workload.PriorityClass;
 import com.trucdnd.gpu_hub_backend.common.constants.Workload.Status;
@@ -29,13 +32,19 @@ import com.trucdnd.gpu_hub_backend.common.constants.Workload.Type;
 import com.trucdnd.gpu_hub_backend.common.utils.RandomK8sResourceNameGenerator;
 
 import java.time.OffsetDateTime;
+import java.util.EnumSet;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 import java.util.UUID;
 
 @Service
 @RequiredArgsConstructor
 public class WorkloadService {
+
+    private static final Set<Status> TERMINAL = EnumSet.of(
+            Status.SUCCEEDED, Status.FAILED, Status.CANCELLED, Status.PREEMPTED);
+
     private final WorkloadRepository workloadRepository;
     private final ProjectRepository projectRepository;
     private final ClusterRepository clusterRepository;
@@ -46,6 +55,7 @@ public class WorkloadService {
     private final DeploymentSpecBuilder deploymentSpecBuilder;
     private final BuiltinResourceService builtinResourceService;
     private final RandomK8sResourceNameGenerator nameGenerator;
+    private final ApplicationEventPublisher eventPublisher;
 
     public List<WorkloadDto> findAll() {
         return workloadRepository.findAll().stream().map(this::toDto).toList();
@@ -96,8 +106,47 @@ public class WorkloadService {
         return toDto(saved);
     }
 
+    @Transactional
     public void delete(UUID id) {
-        workloadRepository.delete(getWorkload(id));
+        Workload workload = getWorkload(id);
+        teardownK8sResource(workload);
+        workloadRepository.delete(workload);
+    }
+
+    @Transactional
+    public WorkloadDto cancel(UUID id) {
+        Workload workload = getWorkload(id);
+        if (TERMINAL.contains(workload.getStatus())) {
+            return toDto(workload);
+        }
+
+        teardownK8sResource(workload);
+
+        Status oldStatus = workload.getStatus();
+        workload.setStatus(Status.CANCELLED);
+        if (workload.getFinishedAt() == null) {
+            workload.setFinishedAt(OffsetDateTime.now());
+        }
+        Workload saved = workloadRepository.save(workload);
+
+        eventPublisher.publishEvent(new WorkloadStatusChangedEvent(saved.getId(), oldStatus, Status.CANCELLED));
+        return toDto(saved);
+    }
+
+    private void teardownK8sResource(Workload workload) {
+        TeamCluster teamCluster = teamClusterRepository
+                .findByTeam_IdAndCluster_Id(workload.getProject().getTeam().getId(), workload.getCluster().getId())
+                .orElse(null);
+        if (teamCluster == null) return;
+
+        String namespace = teamCluster.getNamespace();
+        String labelKey = NotebookSpecBuilder.WORKLOAD_ID_LABEL;
+        String labelValue = workload.getId().toString();
+        switch (workload.getWorkloadType()) {
+            case NOTEBOOK -> notebookService.deleteByLabel(workload.getCluster(), namespace, labelKey, labelValue);
+            case LLM_INFERENCE -> builtinResourceService.deleteDeploymentsByLabel(
+                    workload.getCluster(), namespace, labelKey, labelValue);
+        }
     }
 
     public List<PodInfoDto> listPods(UUID workloadId) {

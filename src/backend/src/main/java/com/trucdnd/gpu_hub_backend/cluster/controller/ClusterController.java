@@ -2,6 +2,8 @@ package com.trucdnd.gpu_hub_backend.cluster.controller;
 
 import java.util.List;
 import java.util.UUID;
+import java.util.concurrent.Executor;
+import java.util.concurrent.Executors;
 import java.net.URI;
 
 import org.springframework.http.MediaType;
@@ -17,7 +19,9 @@ import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 import org.springframework.web.multipart.MultipartFile;
+import org.springframework.web.servlet.mvc.method.annotation.SseEmitter;
 
+import com.trucdnd.gpu_hub_backend.cluster.dto.ClusterDetailsDto;
 import com.trucdnd.gpu_hub_backend.cluster.dto.ClusterDto;
 import com.trucdnd.gpu_hub_backend.cluster.dto.JoinClusterRequest;
 import com.trucdnd.gpu_hub_backend.cluster.dto.PatchClusterRequest;
@@ -31,6 +35,7 @@ import lombok.RequiredArgsConstructor;
 @RequiredArgsConstructor
 public class ClusterController {
     private final ClusterService clusterService;
+    private final Executor sseExecutor = Executors.newCachedThreadPool();
 
     @GetMapping
     public ResponseEntity<List<ClusterDto>> getAll() {
@@ -75,5 +80,36 @@ public class ClusterController {
             @PathVariable UUID id,
             @RequestParam("file") MultipartFile file) {
         return ResponseEntity.ok(clusterService.uploadKubeconfig(id, file));
+    }
+
+    @GetMapping("/{id}/details")
+    public ResponseEntity<ClusterDetailsDto> getDetails(@PathVariable UUID id) {
+        return ResponseEntity.ok(clusterService.getClusterDetails(id));
+    }
+
+    @GetMapping(value = "/{id}/details/stream", produces = MediaType.TEXT_EVENT_STREAM_VALUE)
+    public SseEmitter streamDetails(@PathVariable UUID id) {
+        SseEmitter emitter = new SseEmitter(0L);
+        sseExecutor.execute(() -> {
+            try {
+                emitter.send(SseEmitter.event()
+                        .name("details")
+                        .data(clusterService.getClusterDetails(id)));
+                while (!Thread.currentThread().isInterrupted()) {
+                    Thread.sleep(30_000);
+                    emitter.send(SseEmitter.event()
+                            .name("details")
+                            .data(clusterService.getClusterDetails(id)));
+                }
+            } catch (InterruptedException e) {
+                Thread.currentThread().interrupt();
+                emitter.complete();
+            } catch (Exception e) {
+                emitter.completeWithError(e);
+            }
+        });
+        emitter.onTimeout(emitter::complete);
+        emitter.onError(_e -> emitter.complete());
+        return emitter;
     }
 }

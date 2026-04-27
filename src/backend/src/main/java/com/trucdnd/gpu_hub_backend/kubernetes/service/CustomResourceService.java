@@ -92,7 +92,27 @@ public abstract class CustomResourceService {
                     .withName(name)
                     .delete();
         } catch (KubernetesClientException e) {
+            if (e.getCode() == 404) return;
             throw k8sError("delete", cluster, e);
+        }
+    }
+
+    public void deleteByLabel(Cluster cluster, String namespace, String labelKey, String labelValue) {
+        try {
+            KubernetesClient client = clientFactory.createClient(cluster);
+            if (isClusterScoped()) {
+                client.genericKubernetesResources(context())
+                        .withLabel(labelKey, labelValue)
+                        .delete();
+                return;
+            }
+            client.genericKubernetesResources(context())
+                    .inNamespace(namespace)
+                    .withLabel(labelKey, labelValue)
+                    .delete();
+        } catch (KubernetesClientException e) {
+            if (e.getCode() == 404) return;
+            throw k8sError("deleteByLabel " + labelKey + "=" + labelValue, cluster, e);
         }
     }
 

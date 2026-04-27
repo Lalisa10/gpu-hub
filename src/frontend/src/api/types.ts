@@ -87,6 +87,47 @@ export interface PatchClusterRequest {
   status?: ClusterStatus;
 }
 
+// ─── Cluster Details ───────────────────────────────────
+
+export interface NodeInfoDto {
+  name: string;
+  ready: boolean;
+  cpuCapacityMillis: number;
+  cpuAllocatableMillis: number;
+  ramCapacityBytes: number;
+  ramAllocatableBytes: number;
+  gpuTotal: number;
+  gpuModel: string | null;
+}
+
+export type GpuStatus = 'Idle' | 'In Use';
+
+export interface GpuInfoDto {
+  index: number;
+  nodeName: string;
+  model: string | null;
+  gpuStatus: GpuStatus;
+}
+
+export interface ActiveWorkloadSummaryDto {
+  id: string;
+  name: string;
+  workloadType: string;
+  requestedGpu: number;
+  status: string;
+  startedAt: string | null;
+}
+
+export interface ClusterDetailsDto {
+  clusterId: string;
+  clusterName: string;
+  gpusTotal: number;
+  gpusInUse: number;
+  nodes: NodeInfoDto[];
+  gpus: GpuInfoDto[];
+  activeWorkloads: ActiveWorkloadSummaryDto[];
+}
+
 // ─── Policy ────────────────────────────────────────────
 export interface PolicyDto {
   id: string;
