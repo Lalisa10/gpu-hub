@@ -15,6 +15,7 @@ public class ClusterMapper {
                 .name(cluster.getName())
                 .description(cluster.getDescription())
                 .status(cluster.getStatus())
+                .juicefsMetaurl(cluster.getJuicefsMetaurl())
                 .createdAt(cluster.getCreatedAt())
                 .updatedAt(cluster.getUpdatedAt())
                 .build();
@@ -25,6 +26,7 @@ public class ClusterMapper {
                 .name(request.name())
                 .description(request.description())
                 .kubeconfigRef(request.kubeconfigRef())
+                .juicefsMetaurl(request.juicefsMetaurl())
                 .build();
     }
 }

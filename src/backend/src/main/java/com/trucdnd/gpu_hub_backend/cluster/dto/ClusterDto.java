@@ -14,6 +14,7 @@ public record ClusterDto(
     @NotBlank String name,
     String description,
     @NotNull Cluster.Status status,
+    String juicefsMetaurl,
     @NotNull OffsetDateTime createdAt,
     @NotNull OffsetDateTime updatedAt
     ) {}

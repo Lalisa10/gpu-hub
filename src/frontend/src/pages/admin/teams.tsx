@@ -64,7 +64,7 @@ export default function TeamsPage() {
   const [showAddCluster, setShowAddCluster] = useState(false);
   const [teamForm, setTeamForm] = useState({ name: '', description: '' });
   const [memberForm, setMemberForm] = useState({ userId: '', role: 'MEMBER' as TeamRole });
-  const [tcForm, setTcForm] = useState({ clusterId: '', policyId: '', namespace: '' });
+  const [tcForm, setTcForm] = useState({ clusterId: '', policyId: '' });
 
   const teamColumns: Column<TeamDto>[] = [
     { header: 'Name', accessor: 'name' },
@@ -163,8 +163,6 @@ export default function TeamsPage() {
       className: 'w-12',
     },
   ];
-
-  const normalizeNamespace = (value: string) => value.trim().toLowerCase();
 
   return (
     <div>
@@ -362,32 +360,26 @@ export default function TeamsPage() {
                 </SelectContent>
               </Select>
             </div>
-            <div className="space-y-2">
-              <Label>Namespace</Label>
-              <Input
-                value={tcForm.namespace}
-                onChange={(e) => setTcForm({ ...tcForm, namespace: e.target.value })}
-                onBlur={() => setTcForm((prev) => ({ ...prev, namespace: normalizeNamespace(prev.namespace) }))}
-                placeholder="team-namespace"
-              />
-            </div>
+            <p className="text-xs text-muted-foreground">
+              The Kubernetes namespace will be auto-generated from the team name
+              (<code className="font-mono">gpuhub-team-&lt;sanitized-team-name&gt;</code>).
+            </p>
           </div>
           <DialogFooter>
             <Button variant="outline" onClick={() => setShowAddCluster(false)}>Cancel</Button>
             <Button
               onClick={async () => {
                 if (selectedTeam) {
-                  const normalizedNamespace = normalizeNamespace(tcForm.namespace);
                   await createTC.mutateAsync({
                     teamId: selectedTeam.id,
-                    ...tcForm,
-                    namespace: normalizedNamespace,
+                    clusterId: tcForm.clusterId,
+                    policyId: tcForm.policyId,
                   });
                   setShowAddCluster(false);
-                  setTcForm({ clusterId: '', policyId: '', namespace: '' });
+                  setTcForm({ clusterId: '', policyId: '' });
                 }
               }}
-              disabled={createTC.isPending || !tcForm.clusterId || !tcForm.policyId || !tcForm.namespace.trim()}
+              disabled={createTC.isPending || !tcForm.clusterId || !tcForm.policyId}
             >
               Assign
             </Button>

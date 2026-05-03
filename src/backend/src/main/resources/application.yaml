@@ -3,7 +3,7 @@ spring:
     name: gpu-hub-backend
   sql:
     init:
-      schema-locations: classpath:schema_v4.sql
+      schema-locations: classpath:schema_v6.sql
   datasource:
     url: ${DB_URL:jdbc:postgresql://localhost:5432/gpu-hub}
     username: ${DB_USERNAME:postgres}
@@ -21,6 +21,12 @@ object-storage:
 
 kubernetes:
   kubeconfig-bucket: ${KUBERNETES_KUBECONFIG_BUCKET:kubeconfig}
+
+juicefs:
+  storage-type: ${JUICEFS_STORAGE_TYPE:minio}
+  pv-capacity: ${JUICEFS_PV_CAPACITY:10Pi}
+  migration-image: ${JUICEFS_MIGRATION_IMAGE:minio/mc:latest}
+  backoff-limit: ${JUICEFS_BACKOFF_LIMIT:3}
 
 app:
   cors:

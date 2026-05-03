@@ -12,8 +12,12 @@ import com.trucdnd.gpu_hub_backend.kubernetes.factory.KubernetesClientFactory;
 import io.fabric8.kubernetes.api.model.Namespace;
 import io.fabric8.kubernetes.api.model.NamespaceBuilder;
 import io.fabric8.kubernetes.api.model.Node;
+import io.fabric8.kubernetes.api.model.PersistentVolume;
+import io.fabric8.kubernetes.api.model.PersistentVolumeClaim;
 import io.fabric8.kubernetes.api.model.Pod;
+import io.fabric8.kubernetes.api.model.Secret;
 import io.fabric8.kubernetes.api.model.apps.Deployment;
+import io.fabric8.kubernetes.api.model.batch.v1.Job;
 import io.fabric8.kubernetes.client.KubernetesClient;
 import io.fabric8.kubernetes.client.KubernetesClientException;
 import io.fabric8.kubernetes.client.dsl.LogWatch;
@@ -150,6 +154,113 @@ public class BuiltinResourceService {
                     .inContainer(containerName).watchLog(out);
         } catch (KubernetesClientException e) {
             throw k8sError("watch pod logs for '" + podName + "/" + containerName + "' in namespace '" + namespace + "'", cluster, e);
+        }
+    }
+
+    // ── Secrets ───────────────────────────────────────────────────────────────
+
+    public Secret createSecret(Cluster cluster, String namespace, Secret secret) {
+        try {
+            KubernetesClient client = clientFactory.createClient(cluster);
+            return client.secrets().inNamespace(namespace).resource(secret).create();
+        } catch (KubernetesClientException e) {
+            throw k8sError("create secret in namespace '" + namespace + "'", cluster, e);
+        }
+    }
+
+    public void deleteSecretsByLabel(Cluster cluster, String namespace, String labelKey, String labelValue) {
+        try {
+            KubernetesClient client = clientFactory.createClient(cluster);
+            client.secrets().inNamespace(namespace).withLabel(labelKey, labelValue).delete();
+        } catch (KubernetesClientException e) {
+            if (e.getCode() == 404) return;
+            throw k8sError("delete secrets by label " + labelKey + "=" + labelValue
+                    + " in namespace '" + namespace + "'", cluster, e);
+        }
+    }
+
+    // ── PersistentVolumes (cluster-scoped) ────────────────────────────────────
+
+    public PersistentVolume createPersistentVolume(Cluster cluster, PersistentVolume pv) {
+        try {
+            KubernetesClient client = clientFactory.createClient(cluster);
+            return client.persistentVolumes().resource(pv).create();
+        } catch (KubernetesClientException e) {
+            throw k8sError("create persistent volume", cluster, e);
+        }
+    }
+
+    public void deletePersistentVolumesByLabel(Cluster cluster, String labelKey, String labelValue) {
+        try {
+            KubernetesClient client = clientFactory.createClient(cluster);
+            client.persistentVolumes().withLabel(labelKey, labelValue).delete();
+        } catch (KubernetesClientException e) {
+            if (e.getCode() == 404) return;
+            throw k8sError("delete persistent volumes by label " + labelKey + "=" + labelValue, cluster, e);
+        }
+    }
+
+    // ── PersistentVolumeClaims ────────────────────────────────────────────────
+
+    public PersistentVolumeClaim createPersistentVolumeClaim(Cluster cluster, String namespace,
+            PersistentVolumeClaim pvc) {
+        try {
+            KubernetesClient client = clientFactory.createClient(cluster);
+            return client.persistentVolumeClaims().inNamespace(namespace).resource(pvc).create();
+        } catch (KubernetesClientException e) {
+            throw k8sError("create persistent volume claim in namespace '" + namespace + "'", cluster, e);
+        }
+    }
+
+    public boolean persistentVolumeClaimExists(Cluster cluster, String namespace, String name) {
+        try {
+            KubernetesClient client = clientFactory.createClient(cluster);
+            return client.persistentVolumeClaims().inNamespace(namespace).withName(name).get() != null;
+        } catch (KubernetesClientException e) {
+            throw k8sError("check existence of pvc '" + name + "' in namespace '" + namespace + "'", cluster, e);
+        }
+    }
+
+    public void deletePersistentVolumeClaimsByLabel(Cluster cluster, String namespace,
+            String labelKey, String labelValue) {
+        try {
+            KubernetesClient client = clientFactory.createClient(cluster);
+            client.persistentVolumeClaims().inNamespace(namespace).withLabel(labelKey, labelValue).delete();
+        } catch (KubernetesClientException e) {
+            if (e.getCode() == 404) return;
+            throw k8sError("delete persistent volume claims by label " + labelKey + "=" + labelValue
+                    + " in namespace '" + namespace + "'", cluster, e);
+        }
+    }
+
+    // ── Jobs ──────────────────────────────────────────────────────────────────
+
+    public Job createJob(Cluster cluster, String namespace, Job job) {
+        try {
+            KubernetesClient client = clientFactory.createClient(cluster);
+            return client.batch().v1().jobs().inNamespace(namespace).resource(job).create();
+        } catch (KubernetesClientException e) {
+            throw k8sError("create job in namespace '" + namespace + "'", cluster, e);
+        }
+    }
+
+    public Job getJob(Cluster cluster, String namespace, String name) {
+        try {
+            KubernetesClient client = clientFactory.createClient(cluster);
+            return client.batch().v1().jobs().inNamespace(namespace).withName(name).get();
+        } catch (KubernetesClientException e) {
+            throw k8sError("get job '" + name + "' in namespace '" + namespace + "'", cluster, e);
+        }
+    }
+
+    public void deleteJobsByLabel(Cluster cluster, String namespace, String labelKey, String labelValue) {
+        try {
+            KubernetesClient client = clientFactory.createClient(cluster);
+            client.batch().v1().jobs().inNamespace(namespace).withLabel(labelKey, labelValue).delete();
+        } catch (KubernetesClientException e) {
+            if (e.getCode() == 404) return;
+            throw k8sError("delete jobs by label " + labelKey + "=" + labelValue
+                    + " in namespace '" + namespace + "'", cluster, e);
         }
     }
 

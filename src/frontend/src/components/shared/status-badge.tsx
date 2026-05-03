@@ -1,5 +1,5 @@
 import { Badge } from '@/components/ui/badge';
-import type { ClusterStatus, WorkloadStatus } from '@/api/types';
+import type { ClusterStatus, DataSourceStatus, WorkloadStatus } from '@/api/types';
 
 const workloadVariants: Record<WorkloadStatus, string> = {
   pending: 'bg-yellow-100 text-yellow-800',
@@ -16,10 +16,19 @@ const clusterVariants: Record<ClusterStatus, string> = {
   MAINTENANCE: 'bg-red-100 text-red-700',
 };
 
+const dataSourceVariants: Record<DataSourceStatus, string> = {
+  formating: 'bg-amber-100 text-amber-800',
+  formated: 'bg-emerald-100 text-emerald-800',
+};
+
 export function WorkloadStatusBadge({ status }: { status: WorkloadStatus }) {
   return <Badge className={workloadVariants[status]}>{status}</Badge>;
 }
 
 export function ClusterStatusBadge({ status }: { status: ClusterStatus }) {
   return <Badge className={clusterVariants[status]}>{status.toLowerCase()}</Badge>;
+}
+
+export function DataSourceStatusBadge({ status }: { status: DataSourceStatus }) {
+  return <Badge className={dataSourceVariants[status]}>{status}</Badge>;
 }

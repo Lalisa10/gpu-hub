@@ -65,9 +65,6 @@ public class Workload extends MutableEntity {
     @Column(name = "status", nullable = false)
     private com.trucdnd.gpu_hub_backend.common.constants.Workload.Status status;
 
-    @Column(name = "queued_at")
-    private OffsetDateTime queuedAt;
-
     @Column(name = "started_at")
     private OffsetDateTime startedAt;
 

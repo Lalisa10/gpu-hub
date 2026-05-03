@@ -70,6 +70,7 @@ export interface ClusterDto {
   name: string;
   description: string | null;
   status: ClusterStatus;
+  juicefsMetaurl: string | null;
   createdAt: string;
   updatedAt: string;
 }
@@ -78,6 +79,7 @@ export interface JoinClusterRequest {
   name: string;
   description?: string;
   kubeconfigRef?: string;
+  juicefsMetaurl?: string;
 }
 
 export interface PatchClusterRequest {
@@ -85,6 +87,7 @@ export interface PatchClusterRequest {
   description?: string;
   kubeconfigRef?: string;
   status?: ClusterStatus;
+  juicefsMetaurl?: string;
 }
 
 // ─── Cluster Details ───────────────────────────────────
@@ -222,14 +225,12 @@ export interface CreateTeamClusterRequest {
   teamId: string;
   clusterId: string;
   policyId: string;
-  namespace: string;
 }
 
 export interface UpdateTeamClusterRequest {
   teamId: string;
   clusterId: string;
   policyId: string;
-  namespace: string;
 }
 
 // ─── Project ───────────────────────────────────────────
@@ -253,6 +254,53 @@ export interface CreateProjectRequest {
 }
 
 export interface UpdateProjectRequest extends CreateProjectRequest {}
+
+// ─── Data Volume ───────────────────────────────────────
+export type VolumeType = 'dynamic' | 'source';
+
+export interface DataVolumeDto {
+  id: string;
+  teamId: string;
+  clusterId: string;
+  createdById: string;
+  pvcName: string;
+  volumeType: VolumeType;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface AttachVolumeRequest {
+  volumeId: string;
+  mountPath: string;
+}
+
+// ─── Data Source ───────────────────────────────────────
+export type DataSourceStatus = 'formating' | 'formated';
+
+export interface DataSourceDto {
+  id: string;
+  clusterId: string;
+  teamId: string;
+  createdById: string;
+  volumeId: string;
+  pvcName: string;
+  status: DataSourceStatus;
+  bucketUrl: string;
+  accessKey: string;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface CreateDataSourceRequest {
+  clusterId: string;
+  createdById: string;
+  teamId: string;
+  pvcName: string;
+  bucketUrl: string;
+  accessKey: string;
+  secretKey: string;
+  sourcePath?: string;
+}
 
 // ─── Workload ──────────────────────────────────────────
 export interface WorkloadDto {
@@ -287,6 +335,7 @@ export interface CreateWorkloadRequest {
   requestedCpu: number;
   requestedMemory: number;
   extra?: string;
+  volumes?: AttachVolumeRequest[];
 }
 
 // ─── Pod ───────────────────────────────────────────────

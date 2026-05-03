@@ -106,9 +106,9 @@ public class WorkloadStatusReconciler {
         }
 
         if (anyPreempted) return Status.PREEMPTED;
-        if (allSucceeded) return Status.SUCCEEDED;
         if (anyFailed) return Status.FAILED;
         if (anyRunningReady) return Status.RUNNING;
+        if (allSucceeded) return Status.SUCCEEDED;
         return Status.PENDING;
     }
 

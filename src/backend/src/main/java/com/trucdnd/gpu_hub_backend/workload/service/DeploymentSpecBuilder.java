@@ -11,15 +11,21 @@ import org.springframework.stereotype.Component;
 import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.trucdnd.gpu_hub_backend.workload.dto.LlmInferenceExtra;
+import com.trucdnd.gpu_hub_backend.workload.dto.VolumeMountSpec;
 import com.trucdnd.gpu_hub_backend.workload.entity.Workload;
 
 import io.fabric8.kubernetes.api.model.ContainerBuilder;
 import io.fabric8.kubernetes.api.model.ContainerPortBuilder;
 import io.fabric8.kubernetes.api.model.EnvVar;
 import io.fabric8.kubernetes.api.model.EnvVarBuilder;
+import io.fabric8.kubernetes.api.model.PersistentVolumeClaimVolumeSourceBuilder;
 import io.fabric8.kubernetes.api.model.Quantity;
 import io.fabric8.kubernetes.api.model.ResourceRequirements;
 import io.fabric8.kubernetes.api.model.ResourceRequirementsBuilder;
+import io.fabric8.kubernetes.api.model.Volume;
+import io.fabric8.kubernetes.api.model.VolumeBuilder;
+import io.fabric8.kubernetes.api.model.VolumeMount;
+import io.fabric8.kubernetes.api.model.VolumeMountBuilder;
 import io.fabric8.kubernetes.api.model.apps.Deployment;
 import io.fabric8.kubernetes.api.model.apps.DeploymentBuilder;
 @Component
@@ -29,7 +35,8 @@ public class DeploymentSpecBuilder {
 
     private final ObjectMapper objectMapper = new ObjectMapper();
 
-    public Deployment build(Workload workload, String k8sName, String namespace, String queueName) {
+    public Deployment build(Workload workload, String k8sName, String namespace, String queueName,
+            List<VolumeMountSpec> mounts) {
         LlmInferenceExtra extra = parseExtra(workload.getExtra());
         if (extra.modelSource() == null || extra.modelSource().isBlank()) {
             throw new IllegalArgumentException("modelSource is required for LLM_INFERENCE workloads");
@@ -54,6 +61,25 @@ public class DeploymentSpecBuilder {
                 ? 1
                 : extra.replicaCount();
 
+        List<Volume> podVolumes = new ArrayList<>();
+        List<VolumeMount> containerMounts = new ArrayList<>();
+        if (mounts != null) {
+            for (int i = 0; i < mounts.size(); i++) {
+                VolumeMountSpec m = mounts.get(i);
+                String volName = "vol-" + i;
+                podVolumes.add(new VolumeBuilder()
+                        .withName(volName)
+                        .withPersistentVolumeClaim(new PersistentVolumeClaimVolumeSourceBuilder()
+                                .withClaimName(m.pvcName())
+                                .build())
+                        .build());
+                containerMounts.add(new VolumeMountBuilder()
+                        .withName(volName)
+                        .withMountPath(m.mountPath())
+                        .build());
+            }
+        }
+
         return new DeploymentBuilder()
                 .withNewMetadata()
                     .withName(k8sName)
@@ -72,6 +98,7 @@ public class DeploymentSpecBuilder {
                         .withNewSpec()
                             .withSchedulerName("kai-scheduler")
                             .withPriorityClassName(workload.getPriorityClass().dbValue)
+                            .withVolumes(podVolumes)
                             .withContainers(new ContainerBuilder()
                                     .withName(k8sName)
                                     .withImage(workload.getImage())
@@ -82,6 +109,7 @@ public class DeploymentSpecBuilder {
                                             .withContainerPort(VLLM_CONTAINER_PORT)
                                             .build())
                                     .withResources(resources)
+                                    .withVolumeMounts(containerMounts)
                                     .build())
                         .endSpec()
                     .endTemplate()

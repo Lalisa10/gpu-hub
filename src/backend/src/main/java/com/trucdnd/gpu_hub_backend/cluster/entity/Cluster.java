@@ -27,4 +27,7 @@ public class Cluster extends MutableEntity {
     @Column(name = "status", nullable = false)
     private Status status;
 
+    @Column(name = "juicefs_metaurl")
+    private String juicefsMetaurl;
+
 }

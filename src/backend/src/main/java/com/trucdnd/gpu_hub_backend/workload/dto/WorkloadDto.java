@@ -17,7 +17,6 @@ public record WorkloadDto(
         BigDecimal requestedCpu,
         Long requestedMemory,
         com.trucdnd.gpu_hub_backend.common.constants.Workload.Status status,
-        OffsetDateTime queuedAt,
         OffsetDateTime startedAt,
         OffsetDateTime finishedAt,
         String extra,

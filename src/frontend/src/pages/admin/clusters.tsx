@@ -178,7 +178,12 @@ export default function ClustersPage() {
   const [deleteTarget, setDeleteTarget] = useState<ClusterDto | null>(null);
   const [uploadTarget, setUploadTarget] = useState<ClusterDto | null>(null);
   const [selectedFile, setSelectedFile] = useState<File | null>(null);
-  const [form, setForm] = useState({ name: '', description: '', kubeconfigRef: '' });
+  const [form, setForm] = useState({
+    name: '',
+    description: '',
+    kubeconfigRef: '',
+    juicefsMetaurl: '',
+  });
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   const [drawerCluster, setDrawerCluster] = useState<ClusterDto | null>(null);
@@ -256,10 +261,15 @@ export default function ClustersPage() {
   ];
 
   const handleCreate = async () => {
-    await createCluster.mutateAsync(form);
+    await createCluster.mutateAsync({
+      name: form.name,
+      description: form.description || undefined,
+      kubeconfigRef: form.kubeconfigRef || undefined,
+      juicefsMetaurl: form.juicefsMetaurl || undefined,
+    });
     toast.success(`Cluster "${form.name}" created`);
     setShowCreate(false);
-    setForm({ name: '', description: '', kubeconfigRef: '' });
+    setForm({ name: '', description: '', kubeconfigRef: '', juicefsMetaurl: '' });
   };
 
   const handleUpload = async () => {
@@ -302,6 +312,17 @@ export default function ClustersPage() {
                 onChange={(e) => setForm({ ...form, kubeconfigRef: e.target.value })}
                 placeholder="MinIO object key (optional — upload after creation)"
               />
+            </div>
+            <div className="space-y-2">
+              <Label>JuiceFS Metadata URL</Label>
+              <Input
+                value={form.juicefsMetaurl}
+                onChange={(e) => setForm({ ...form, juicefsMetaurl: e.target.value })}
+                placeholder="postgres://user:pass@host:5432/jfs (optional)"
+              />
+              <p className="text-xs text-muted-foreground">
+                Required only if this cluster will host JuiceFS data sources.
+              </p>
             </div>
             <div className="space-y-2">
               <Label>Description</Label>

@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { workloadService } from '../services/workloads';
+import { makeSseHook, openSseTextStream } from './sse';
 import type { CreateWorkloadRequest, PodDto, WorkloadDto } from '../types';
 
 const KEYS = {
@@ -64,55 +65,6 @@ export const useWorkloadPodLogs = (id: string | null, podName: string | null) =>
     refetchInterval: 5_000,
   });
 
-function makeSseHook<T>(buildUrl: (id: string) => string) {
-  return function useSseStream(id: string | null, enabled: boolean) {
-    const [data, setData] = useState<T | null>(null);
-    const [isLoading, setIsLoading] = useState(false);
-    const [isError, setIsError] = useState(false);
-
-    useEffect(() => {
-      if (!enabled || !id) { setData(null); return; }
-      const token = localStorage.getItem('access_token');
-      const ctrl = new AbortController();
-      setIsLoading(true);
-      setIsError(false);
-
-      (async () => {
-        try {
-          const res = await fetch(buildUrl(id), {
-            headers: { Authorization: `Bearer ${token}` },
-            signal: ctrl.signal,
-          });
-          if (!res.ok || !res.body) throw new Error('SSE connect failed');
-          setIsLoading(false);
-          const reader = res.body.getReader();
-          const decoder = new TextDecoder();
-          let buf = '';
-          while (true) {
-            const { done, value } = await reader.read();
-            if (done) break;
-            buf += decoder.decode(value, { stream: true });
-            const lines = buf.split('\n');
-            buf = lines.pop() ?? '';
-            for (const line of lines) {
-              if (line.startsWith('data:')) {
-                try { setData(JSON.parse(line.slice(5).trim())); } catch { /* skip malformed */ }
-              }
-            }
-          }
-        } catch (e) {
-          if ((e as Error).name !== 'AbortError') setIsError(true);
-          setIsLoading(false);
-        }
-      })();
-
-      return () => ctrl.abort();
-    }, [id, enabled]);
-
-    return { data, isLoading, isError };
-  };
-}
-
 export const useWorkloadStatusStream = makeSseHook<WorkloadDto>(
   (id) => `/api/workloads/${id}/status/stream`,
 );
@@ -131,42 +83,25 @@ export function useWorkloadPodLogsStream(
   const [isError, setIsError] = useState(false);
 
   useEffect(() => {
-    if (!enabled || !workloadId || !podName) { setData(null); return; }
-    const token = localStorage.getItem('access_token');
-    const ctrl = new AbortController();
+    if (!enabled || !workloadId || !podName) {
+      setData(null);
+      return;
+    }
     setIsLoading(true);
     setIsError(false);
-
-    (async () => {
-      try {
-        const res = await fetch(`/api/workloads/${workloadId}/pods/${podName}/logs/stream`, {
-          headers: { Authorization: `Bearer ${token}` },
-          signal: ctrl.signal,
-        });
-        if (!res.ok || !res.body) throw new Error('SSE connect failed');
-        setIsLoading(false);
-        const reader = res.body.getReader();
-        const decoder = new TextDecoder();
-        let buf = '';
-        while (true) {
-          const { done, value } = await reader.read();
-          if (done) break;
-          buf += decoder.decode(value, { stream: true });
-          const lines = buf.split('\n');
-          buf = lines.pop() ?? '';
-          for (const line of lines) {
-            if (line.startsWith('data:')) {
-              try { setData(JSON.parse(line.slice(5).trim())); } catch { /* skip malformed */ }
-            }
-          }
-        }
-      } catch (e) {
-        if ((e as Error).name !== 'AbortError') setIsError(true);
-        setIsLoading(false);
-      }
-    })();
-
-    return () => ctrl.abort();
+    return openSseTextStream(
+      `/api/workloads/${workloadId}/pods/${podName}/logs/stream`,
+      {
+        onMessage: (text) => {
+          setIsLoading(false);
+          setData(text);
+        },
+        onError: () => {
+          setIsLoading(false);
+          setIsError(true);
+        },
+      },
+    );
   }, [workloadId, podName, enabled]);
 
   return { data, isLoading, isError };

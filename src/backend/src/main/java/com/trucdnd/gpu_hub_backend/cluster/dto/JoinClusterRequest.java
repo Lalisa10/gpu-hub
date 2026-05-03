@@ -7,5 +7,6 @@ import lombok.Builder;
 public record JoinClusterRequest(
     @NotBlank String name,
     String description,
-    String kubeconfigRef
+    String kubeconfigRef,
+    String juicefsMetaurl
 ) { }

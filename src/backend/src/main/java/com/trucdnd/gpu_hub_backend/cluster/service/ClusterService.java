@@ -74,12 +74,13 @@ public class ClusterService {
         cluster.setName(request.name());
         cluster.setDescription(request.description());
         cluster.setKubeconfigRef(request.kubeconfigRef());
+        cluster.setJuicefsMetaurl(request.juicefsMetaurl());
         Cluster saved = clusterRepository.save(cluster);
         return ClusterMapper.toDto(saved);
     }
 
     public ClusterDto patch(UUID id, PatchClusterRequest request) {
-        
+
         Cluster cluster = clusterRepository.findById(id).orElseThrow(() -> new EntityNotFoundException("Cluster not found with id: " + id));
 
         if (request.description().isPresent()) {
@@ -96,6 +97,10 @@ public class ClusterService {
 
         if (request.status().isPresent()) {
             cluster.setStatus(request.status().orElse(null));
+        }
+
+        if (request.juicefsMetaurl().isPresent()) {
+            cluster.setJuicefsMetaurl(request.juicefsMetaurl().orElse(null));
         }
 
         return ClusterMapper.toDto(clusterRepository.save(cluster));

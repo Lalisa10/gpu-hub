@@ -10,6 +10,8 @@ import {
   List,
   LogOut,
   ChevronDown,
+  Database,
+  HardDrive,
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { useAuth } from '@/contexts/auth-context';
@@ -40,6 +42,8 @@ const adminNav: NavItem[] = [
 const commonNav: NavItem[] = [
   { label: 'My Workloads', href: '/workloads', icon: List },
   { label: 'Submit Workload', href: '/workloads/new', icon: Play },
+  { label: 'Data Sources', href: '/data-sources', icon: Database },
+  { label: 'Data Volumes', href: '/data-volumes', icon: HardDrive },
 ];
 
 const teamLeadNav: NavItem[] = [

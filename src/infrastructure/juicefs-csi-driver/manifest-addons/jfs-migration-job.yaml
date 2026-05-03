@@ -1,0 +1,27 @@
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: juicefs-model-migration
+spec:
+  template:
+    spec:
+      containers:
+      - name: migrator
+        image: minio/mc:latest
+        command: ["/bin/sh", "-c"]
+        args:
+          - |
+            mc alias set myminio http://172.17.0.1:9000 minioadmin minioadmin && \
+            echo "Starting Migration..." && \
+            mc cp -r myminio/llm-models/Qwen2.5-Coder-3B-Instruct /data/ && \
+            echo "Migration Success!"
+        volumeMounts:
+        - name: jfs-volume
+          mountPath: /data
+      restartPolicy: OnFailure # Quan trọng: Chỉ chạy lại nếu bị lỗi
+      volumes:
+      - name: jfs-volume
+        persistentVolumeClaim:
+          claimName: juicefs-pvc
+  backoffLimit: 3 # Thử lại tối đa 3 lần nếu thất bại
+  

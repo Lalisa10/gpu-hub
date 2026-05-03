@@ -2,6 +2,8 @@ package com.trucdnd.gpu_hub_backend.workload.service;
 
 import com.trucdnd.gpu_hub_backend.cluster.entity.Cluster;
 import com.trucdnd.gpu_hub_backend.cluster.repository.ClusterRepository;
+import com.trucdnd.gpu_hub_backend.data_volume.entity.DataVolume;
+import com.trucdnd.gpu_hub_backend.data_volume.repository.DataVolumeRepository;
 import com.trucdnd.gpu_hub_backend.kubernetes.service.BuiltinResourceService;
 import com.trucdnd.gpu_hub_backend.kubernetes.service.NotebookService;
 import com.trucdnd.gpu_hub_backend.project.entity.Project;
@@ -12,10 +14,14 @@ import com.trucdnd.gpu_hub_backend.user.entity.User;
 import com.trucdnd.gpu_hub_backend.user.repository.UserRepository;
 import com.trucdnd.gpu_hub_backend.workload.dto.CreateWorkloadRequest;
 import com.trucdnd.gpu_hub_backend.workload.dto.PodInfoDto;
+import com.trucdnd.gpu_hub_backend.workload.dto.VolumeMountSpec;
 import com.trucdnd.gpu_hub_backend.workload.dto.WorkloadDto;
 import com.trucdnd.gpu_hub_backend.workload.entity.Workload;
 import com.trucdnd.gpu_hub_backend.workload.event.WorkloadStatusChangedEvent;
 import com.trucdnd.gpu_hub_backend.workload.repository.WorkloadRepository;
+import com.trucdnd.gpu_hub_backend.workload_volume.dto.AttachVolumeRequest;
+import com.trucdnd.gpu_hub_backend.workload_volume.entity.WorkloadVolume;
+import com.trucdnd.gpu_hub_backend.workload_volume.repository.WorkloadVolumeRepository;
 import io.fabric8.kubernetes.api.model.ContainerStatus;
 import io.fabric8.kubernetes.api.model.GenericKubernetesResource;
 import io.fabric8.kubernetes.api.model.Pod;
@@ -32,7 +38,9 @@ import com.trucdnd.gpu_hub_backend.common.constants.Workload.Type;
 import com.trucdnd.gpu_hub_backend.common.utils.RandomK8sResourceNameGenerator;
 
 import java.time.OffsetDateTime;
+import java.util.ArrayList;
 import java.util.EnumSet;
+import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
@@ -50,6 +58,8 @@ public class WorkloadService {
     private final ClusterRepository clusterRepository;
     private final UserRepository userRepository;
     private final TeamClusterRepository teamClusterRepository;
+    private final DataVolumeRepository dataVolumeRepository;
+    private final WorkloadVolumeRepository workloadVolumeRepository;
     private final NotebookService notebookService;
     private final NotebookSpecBuilder notebookSpecBuilder;
     private final DeploymentSpecBuilder deploymentSpecBuilder;
@@ -65,6 +75,7 @@ public class WorkloadService {
         return toDto(getWorkload(id));
     }
 
+    @Transactional
     public WorkloadDto create(CreateWorkloadRequest request) {
         Project project = projectRepository.findById(request.projectId())
                 .orElseThrow(() -> new EntityNotFoundException("Project not found: " + request.projectId()));
@@ -83,6 +94,8 @@ public class WorkloadService {
                         "TeamCluster not found for team=" + project.getTeam().getId()
                                 + " cluster=" + cluster.getId()));
 
+        List<VolumeMountSpec> mounts = resolveRequestedVolumes(project, cluster, request.volumes());
+
         Workload entity = Workload.builder()
                 .project(project)
                 .cluster(cluster)
@@ -100,17 +113,59 @@ public class WorkloadService {
 
         Workload saved = workloadRepository.save(entity);
 
+        if (request.volumes() != null && !request.volumes().isEmpty()) {
+            persistAttachments(saved, request.volumes());
+        }
+
         String k8sName = buildK8sName(saved);
-        submit(saved, k8sName, teamCluster.getNamespace());
+        submit(saved, k8sName, teamCluster.getNamespace(), mounts);
 
         return toDto(saved);
     }
 
+    private List<VolumeMountSpec> resolveRequestedVolumes(Project project, Cluster cluster,
+            List<AttachVolumeRequest> requested) {
+        if (requested == null || requested.isEmpty()) return List.of();
+
+        UUID projectTeamId = project.getTeam().getId();
+        Set<UUID> seen = new HashSet<>();
+        List<VolumeMountSpec> mounts = new ArrayList<>();
+
+        for (AttachVolumeRequest req : requested) {
+            if (!seen.add(req.volumeId())) {
+                throw new IllegalArgumentException("Duplicate volume in request: " + req.volumeId());
+            }
+            DataVolume volume = dataVolumeRepository.findById(req.volumeId())
+                    .orElseThrow(() -> new EntityNotFoundException("DataVolume not found: " + req.volumeId()));
+
+            if (!volume.getCluster().getId().equals(cluster.getId())) {
+                throw new IllegalArgumentException("DataVolume " + volume.getId()
+                        + " is on a different cluster than the workload");
+            }
+            if (!volume.getTeam().getId().equals(projectTeamId)) {
+                throw new IllegalArgumentException("DataVolume " + volume.getId()
+                        + " belongs to team " + volume.getTeam().getId()
+                        + " which does not own the workload's project (team " + projectTeamId + ")");
+            }
+            mounts.add(new VolumeMountSpec(volume.getPvcName(), req.mountPath()));
+        }
+        return mounts;
+    }
+
+    private void persistAttachments(Workload workload, List<AttachVolumeRequest> requested) {
+        for (AttachVolumeRequest req : requested) {
+            DataVolume volume = dataVolumeRepository.getReferenceById(req.volumeId());
+            workloadVolumeRepository.save(WorkloadVolume.builder()
+                    .workload(workload)
+                    .volume(volume)
+                    .mountPath(req.mountPath())
+                    .build());
+        }
+    }
+
     @Transactional
     public void delete(UUID id) {
-        Workload workload = getWorkload(id);
-        teardownK8sResource(workload);
-        workloadRepository.delete(workload);
+        cancel(id);
     }
 
     @Transactional
@@ -233,15 +288,17 @@ public class WorkloadService {
         return nameGenerator.generateWorkloadName(workload.getSubmittedBy().getUsername(), kind);
     }
 
-    private void submit(Workload workload, String k8sName, String namespace) {
+    private void submit(Workload workload, String k8sName, String namespace, List<VolumeMountSpec> mounts) {
         String queueName = workload.getProject().getName();
         switch (workload.getWorkloadType()) {
             case NOTEBOOK -> {
-                GenericKubernetesResource notebook = notebookSpecBuilder.build(workload, k8sName, namespace, queueName);
+                GenericKubernetesResource notebook = notebookSpecBuilder.build(
+                        workload, k8sName, namespace, queueName, mounts);
                 notebookService.create(workload.getCluster(), notebook);
             }
             case LLM_INFERENCE -> {
-                Deployment deployment = deploymentSpecBuilder.build(workload, k8sName, namespace, queueName);
+                Deployment deployment = deploymentSpecBuilder.build(
+                        workload, k8sName, namespace, queueName, mounts);
                 builtinResourceService.createDeployment(workload.getCluster(), namespace, deployment);
             }
         }
@@ -261,7 +318,6 @@ public class WorkloadService {
                 entity.getRequestedCpu(),
                 entity.getRequestedMemory(),
                 entity.getStatus(),
-                entity.getQueuedAt(),
                 entity.getStartedAt(),
                 entity.getFinishedAt(),
                 entity.getExtra(),

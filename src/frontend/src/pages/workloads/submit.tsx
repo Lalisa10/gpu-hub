@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { PageHeader } from '@/components/shared/page-header';
 import { Button } from '@/components/ui/button';
@@ -18,6 +18,8 @@ import { useCreateWorkload } from '@/api/hooks/use-workloads';
 import { useProjects } from '@/api/hooks/use-projects';
 import { useTeams } from '@/api/hooks/use-teams';
 import { useClusters } from '@/api/hooks/use-clusters';
+import { useDataVolumes } from '@/api/hooks/use-data-volumes';
+import type { AttachVolumeRequest } from '@/api/types';
 import { X, Plus } from 'lucide-react';
 
 interface NotebookExtra {
@@ -75,10 +77,20 @@ export default function SubmitWorkloadPage() {
     replicaCount: 1,
     envVars: [],
   });
+  const [volumes, setVolumes] = useState<AttachVolumeRequest[]>([]);
 
   const myTeamIds = isAdmin ? teams.map((t) => t.id) : teamMemberships.map((m) => m.teamId);
   const accessibleProjects = projects.filter((p) => myTeamIds.includes(p.teamId));
   const selectedProject = projects.find((p) => p.id === projectId);
+
+  const { data: teamVolumes = [] } = useDataVolumes(selectedProject?.teamId);
+  const availableVolumes = teamVolumes.filter(
+    (v) => v.clusterId === selectedProject?.clusterId,
+  );
+
+  useEffect(() => {
+    setVolumes([]);
+  }, [projectId]);
 
   const addEnvVar = () =>
     setLlm((prev) => ({ ...prev, envVars: [...prev.envVars, { key: '', value: '' }] }));
@@ -90,10 +102,22 @@ export default function SubmitWorkloadPage() {
       envVars: prev.envVars.map((ev, idx) => (idx === i ? { ...ev, [field]: val } : ev)),
     }));
 
+  const addVolume = () =>
+    setVolumes((prev) => [...prev, { volumeId: '', mountPath: '' }]);
+  const removeVolume = (i: number) =>
+    setVolumes((prev) => prev.filter((_, idx) => idx !== i));
+  const updateVolume = (i: number, field: 'volumeId' | 'mountPath', val: string) =>
+    setVolumes((prev) =>
+      prev.map((v, idx) => (idx === i ? { ...v, [field]: val } : v)),
+    );
+
   const handleSubmit = async () => {
     if (!projectId || !name || !image || !user) return;
     setError('');
     const extra = tab === 'notebook' ? JSON.stringify(notebook) : JSON.stringify(llm);
+    const cleanedVolumes = volumes
+      .filter((v) => v.volumeId && v.mountPath.trim())
+      .map((v) => ({ volumeId: v.volumeId, mountPath: v.mountPath.trim() }));
     try {
       await createWorkload.mutateAsync({
         projectId,
@@ -106,6 +130,7 @@ export default function SubmitWorkloadPage() {
         requestedCpu: cpuRequest,
         requestedMemory: memRequest,
         extra,
+        volumes: cleanedVolumes.length ? cleanedVolumes : undefined,
       });
       navigate('/workloads');
     } catch (err: unknown) {
@@ -215,6 +240,102 @@ export default function SubmitWorkloadPage() {
                 />
               </div>
             </div>
+          </Section>
+
+          {/* Section 3 – Data Volumes (shared) */}
+          <Section title="Data Volumes">
+            {!selectedProject ? (
+              <p className="text-[12px] text-muted-foreground">
+                Select a project to attach volumes.
+              </p>
+            ) : availableVolumes.length === 0 ? (
+              <p className="text-[12px] text-muted-foreground">
+                No volumes available for this team and cluster.
+              </p>
+            ) : (
+              <>
+                {volumes.length > 0 && (
+                  <div className="mb-3 space-y-2">
+                    <div className="grid grid-cols-[1fr_1fr_2rem] gap-2">
+                      <span className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">
+                        Volume
+                      </span>
+                      <span className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">
+                        Mount Path
+                      </span>
+                      <span />
+                    </div>
+                    {volumes.map((row, i) => {
+                      const optionList = availableVolumes.filter(
+                        (vol) =>
+                          vol.id === row.volumeId ||
+                          !volumes.some(
+                            (other, j) => j !== i && other.volumeId === vol.id,
+                          ),
+                      );
+                      return (
+                        <div
+                          key={i}
+                          className="grid grid-cols-[1fr_1fr_2rem] items-center gap-2"
+                        >
+                          <Select
+                            value={row.volumeId}
+                            onValueChange={(v) => v && updateVolume(i, 'volumeId', v)}
+                          >
+                            <SelectTrigger className={INPUT_CLS}>
+                              {row.volumeId ? (
+                                <span>
+                                  {availableVolumes.find((v) => v.id === row.volumeId)
+                                    ?.pvcName ?? '—'}
+                                </span>
+                              ) : (
+                                <span className="text-muted-foreground">
+                                  Select volume
+                                </span>
+                              )}
+                            </SelectTrigger>
+                            <SelectContent>
+                              {optionList.map((vol) => (
+                                <SelectItem key={vol.id} value={vol.id}>
+                                  {vol.pvcName}
+                                  <span className="ml-2 text-[10px] text-muted-foreground">
+                                    {vol.volumeType}
+                                  </span>
+                                </SelectItem>
+                              ))}
+                            </SelectContent>
+                          </Select>
+                          <Input
+                            className={INPUT_CLS}
+                            value={row.mountPath}
+                            onChange={(e) =>
+                              updateVolume(i, 'mountPath', e.target.value)
+                            }
+                            placeholder="/data"
+                          />
+                          <Button
+                            variant="ghost"
+                            size="icon"
+                            className="h-8 w-8 shrink-0 text-muted-foreground hover:text-destructive"
+                            onClick={() => removeVolume(i)}
+                          >
+                            <X className="h-3.5 w-3.5" />
+                          </Button>
+                        </div>
+                      );
+                    })}
+                  </div>
+                )}
+                <button
+                  type="button"
+                  onClick={addVolume}
+                  className="flex w-full items-center justify-center gap-1.5 rounded-lg border border-dashed border-border py-2.5 text-[12px] text-muted-foreground transition-colors hover:border-foreground/30 hover:text-foreground"
+                >
+                  <Plus className="h-3.5 w-3.5" />
+                  Add volume
+                </button>
+              </>
+            )}
           </Section>
 
           {/* Notebook-specific */}

@@ -77,7 +77,9 @@ public class UserService {
     }
 
     public void delete(UUID id) {
-        userRepository.delete(getUser(id));
+        User user = getUser(id);
+        user.setIsActive(false);
+        userRepository.save(user);
     }
 
     private User getUser(UUID id) {

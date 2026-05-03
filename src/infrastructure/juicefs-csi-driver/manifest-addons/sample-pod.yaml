@@ -1,0 +1,25 @@
+apiVersion: v1
+kind: Pod
+metadata:
+  name: juicefs-app
+  namespace: default
+spec:
+  containers:
+  - args:
+    - infinity
+    command:
+    - sleep
+    image: docker.io/library/nginx:alpine
+    name: app
+    volumeMounts:
+    - mountPath: /data
+      name: data
+      # Propagation must be added for automatic mount point recovery (if Mount Pod ever fails)
+      mountPropagation: HostToContainer
+    resources:
+      requests:
+        cpu: 10m
+  volumes:
+  - name: data
+    persistentVolumeClaim:
+      claimName: juicefs-pvc
