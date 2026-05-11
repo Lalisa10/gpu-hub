@@ -101,7 +101,7 @@ public class WorkloadService {
                 .cluster(cluster)
                 .submittedBy(submittedBy)
                 .workloadType(request.workloadType())
-                .priorityClass(PriorityClass.TRAIN)
+                .priorityClass(defaultPriorityClass(request.workloadType()))
                 .name(request.name())
                 .image(request.image())
                 .requestedGpu(request.requestedGpu())
@@ -171,11 +171,15 @@ public class WorkloadService {
     @Transactional
     public WorkloadDto cancel(UUID id) {
         Workload workload = getWorkload(id);
+
+        // Always tear down K8s resources — deleteByLabel is idempotent and 404-tolerant,
+        // so this also recovers from status drift (e.g. a workload stuck in SUCCEEDED
+        // while its pod is still running).
+        teardownK8sResource(workload);
+
         if (TERMINAL.contains(workload.getStatus())) {
             return toDto(workload);
         }
-
-        teardownK8sResource(workload);
 
         Status oldStatus = workload.getStatus();
         workload.setStatus(Status.CANCELLED);
@@ -280,6 +284,13 @@ public class WorkloadService {
     private Workload getWorkload(UUID id) {
         return workloadRepository.findById(id)
                 .orElseThrow(() -> new EntityNotFoundException("Workload not found: " + id));
+    }
+
+    private static PriorityClass defaultPriorityClass(Type workloadType) {
+        return switch (workloadType) {
+            case NOTEBOOK -> PriorityClass.BUILD_PREEMPTIBLE;
+            case LLM_INFERENCE -> PriorityClass.INFERENCE;
+        };
     }
 
     /** Generates the K8s resource name: {@code <username>-<kind>-<random5>}. */

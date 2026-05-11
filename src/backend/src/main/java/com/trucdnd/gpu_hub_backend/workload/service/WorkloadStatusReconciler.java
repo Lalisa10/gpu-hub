@@ -2,6 +2,7 @@ package com.trucdnd.gpu_hub_backend.workload.service;
 
 import com.trucdnd.gpu_hub_backend.cluster.entity.Cluster;
 import com.trucdnd.gpu_hub_backend.common.constants.Workload.Status;
+import com.trucdnd.gpu_hub_backend.common.constants.Workload.Type;
 import com.trucdnd.gpu_hub_backend.kubernetes.service.BuiltinResourceService;
 import com.trucdnd.gpu_hub_backend.team.repository.TeamClusterRepository;
 import com.trucdnd.gpu_hub_backend.workload.entity.Workload;
@@ -33,6 +34,8 @@ public class WorkloadStatusReconciler {
 
     private static final Set<Status> TERMINAL = EnumSet.of(
             Status.SUCCEEDED, Status.FAILED, Status.CANCELLED, Status.PREEMPTED);
+
+    private static final Set<Type> LONG_RUNNING = EnumSet.of(Type.NOTEBOOK, Type.LLM_INFERENCE);
 
     private static final String PREEMPTED_REASON = "Preempted";
 
@@ -77,6 +80,12 @@ public class WorkloadStatusReconciler {
                 Map.of(NotebookSpecBuilder.WORKLOAD_ID_LABEL, workloadId.toString()));
 
         Status target = computeStatus(pods);
+        // Long-running workloads (Notebook, LLM Inference) never end on their own —
+        // a transient phase=Succeeded during pod restart would otherwise lock them
+        // into a terminal SUCCEEDED state.
+        if (target == Status.SUCCEEDED && LONG_RUNNING.contains(workload.getWorkloadType())) {
+            return;
+        }
         applyStatus(workload, target);
     }
 
