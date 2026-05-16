@@ -33,9 +33,9 @@ public class DataSourceController {
 
     @GetMapping
     @PreAuthorize("hasRole('ADMIN')")
-    public ResponseEntity<List<DataSourceDto>> getAll(@RequestParam(required = false) UUID volumeId) {
-        if (volumeId != null) {
-            return ResponseEntity.ok(dataSourceService.findByVolume(volumeId));
+    public ResponseEntity<List<DataSourceDto>> getAll(@RequestParam(required = false) UUID teamId) {
+        if (teamId != null) {
+            return ResponseEntity.ok(dataSourceService.findByTeam(teamId));
         }
         return ResponseEntity.ok(dataSourceService.findAll());
     }

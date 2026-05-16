@@ -1,0 +1,8 @@
+#!/bin/sh
+# Extract the cluster DNS resolver IP from /etc/resolv.conf so nginx can
+# re-resolve the backend Service ClusterIP at runtime. The nginx official
+# entrypoint sources *.envsh files (when executable) before running the
+# envsubst step on /etc/nginx/templates/, so NGINX_RESOLVER becomes
+# available for substitution into default.conf.template.
+NGINX_RESOLVER=$(awk '/^nameserver/ { print $2; exit }' /etc/resolv.conf)
+export NGINX_RESOLVER

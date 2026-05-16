@@ -1,0 +1,21 @@
+# Build artifacts
+backend/target/
+frontend/node_modules/
+frontend/dist/
+
+# VCS
+.git/
+.gitignore
+
+# IDE
+.idea/
+.vscode/
+*.iml
+**/.DS_Store
+
+# Stuff outside the actual build
+infrastructure/
+*.md
+HELP.md
+*.drawio
+docker-compose.yml

@@ -68,7 +68,11 @@ export default function DataSourcesListPage() {
   const clusterName = (id: string) => clusters.find((c) => c.id === id)?.name ?? '—';
 
   const columns: Column<DataSourceDto>[] = [
-    { header: 'PVC Name', accessor: 'pvcName' },
+    { header: 'Name', accessor: 'name' },
+    {
+      header: 'Folder',
+      accessor: (s) => <span className="font-mono text-xs text-muted-foreground">{s.folderName}</span>,
+    },
     { header: 'Team', accessor: (s) => teamName(s.teamId) },
     { header: 'Cluster', accessor: (s) => clusterName(s.clusterId) },
     { header: 'Bucket', accessor: (s) => <span className="font-mono text-xs">{s.bucketUrl}</span> },
@@ -135,7 +139,7 @@ export default function DataSourcesListPage() {
           <SheetHeader className="border-b px-6 py-5">
             <SheetTitle className="text-lg">
               Data Source:{' '}
-              <span className="font-mono text-muted-foreground">{activeSource?.pvcName}</span>
+              <span className="font-mono text-muted-foreground">{activeSource?.name}</span>
             </SheetTitle>
             {activeSource && (
               <div className="mt-2 flex flex-wrap items-center gap-2 text-xs">
@@ -152,6 +156,7 @@ export default function DataSourcesListPage() {
               <section>
                 <h3 className="mb-2 font-heading text-sm font-medium">Connection</h3>
                 <div className="space-y-2 rounded-md border bg-background px-3 py-2.5 text-xs">
+                  <Detail label="Folder" value={activeSource.folderName} mono />
                   <Detail label="Bucket URL" value={activeSource.bucketUrl} mono />
                   <Detail label="Access Key" value={activeSource.accessKey} mono />
                   <Detail
@@ -203,7 +208,7 @@ export default function DataSourcesListPage() {
         open={!!deleteTarget}
         onOpenChange={() => setDeleteTarget(null)}
         title="Delete Data Source"
-        description={`Delete data source "${deleteTarget?.pvcName}"? This removes the JuiceFS volume and all attached resources. Workloads still mounting it must be detached first.`}
+        description={`Delete data source "${deleteTarget?.name}"? Workloads still mounting it must be detached first.`}
         onConfirm={async () => {
           if (deleteTarget) {
             await deleteSource.mutateAsync(deleteTarget.id);
@@ -245,7 +250,7 @@ function AddDataSourceDialog({
   const createSource = useCreateDataSource();
   const [teamId, setTeamId] = useState('');
   const [clusterId, setClusterId] = useState('');
-  const [pvcName, setPvcName] = useState('');
+  const [name, setName] = useState('');
   const [bucketUrl, setBucketUrl] = useState('');
   const [accessKey, setAccessKey] = useState('');
   const [secretKey, setSecretKey] = useState('');
@@ -256,7 +261,7 @@ function AddDataSourceDialog({
     if (!open) {
       setTeamId('');
       setClusterId('');
-      setPvcName('');
+      setName('');
       setBucketUrl('');
       setAccessKey('');
       setSecretKey('');
@@ -277,26 +282,20 @@ function AddDataSourceDialog({
   const valid =
     !!teamId &&
     !!clusterId &&
-    !!pvcName.trim() &&
+    !!name.trim() &&
     !!bucketUrl.trim() &&
     !!accessKey.trim() &&
     !!secretKey.trim();
 
   const submit = async () => {
     if (!valid) return;
-    if (!/^[a-z0-9]([-a-z0-9]*[a-z0-9])?$/.test(pvcName)) {
-      setError(
-        'PVC name must be lowercase alphanumeric or "-", start and end with alphanumeric.',
-      );
-      return;
-    }
     setError('');
     try {
       await createSource.mutateAsync({
         clusterId,
         teamId,
         createdById: userId,
-        pvcName: pvcName.trim(),
+        name: name.trim(),
         bucketUrl: bucketUrl.trim(),
         accessKey: accessKey.trim(),
         secretKey: secretKey.trim(),
@@ -370,15 +369,15 @@ function AddDataSourceDialog({
           </div>
 
           <div className="space-y-1.5">
-            <Label className={LABEL_CLS}>PVC Name *</Label>
+            <Label className={LABEL_CLS}>Name *</Label>
             <Input
               className={INPUT_CLS}
-              value={pvcName}
-              onChange={(e) => setPvcName(e.target.value)}
-              placeholder="my-dataset"
+              value={name}
+              onChange={(e) => setName(e.target.value)}
+              placeholder="e.g. qwen-3b"
             />
             <p className="text-[11px] text-muted-foreground">
-              Lowercase letters, digits, and hyphens. Must be unique in the team's namespace.
+              Friendly name unique within the team. The backend will sanitize it into a folder under the team PVC.
             </p>
           </div>
 

@@ -6,18 +6,11 @@ import java.util.Map;
 
 import org.springframework.stereotype.Component;
 
-import com.trucdnd.gpu_hub_backend.cluster.entity.Cluster;
 import com.trucdnd.gpu_hub_backend.common.utils.RandomK8sResourceNameGenerator;
 import com.trucdnd.gpu_hub_backend.data_source.config.JuicefsProperties;
 import com.trucdnd.gpu_hub_backend.data_source.entity.DataSource;
+import com.trucdnd.gpu_hub_backend.kubernetes.util.K8sLabels;
 
-import io.fabric8.kubernetes.api.model.PersistentVolume;
-import io.fabric8.kubernetes.api.model.PersistentVolumeBuilder;
-import io.fabric8.kubernetes.api.model.PersistentVolumeClaim;
-import io.fabric8.kubernetes.api.model.PersistentVolumeClaimBuilder;
-import io.fabric8.kubernetes.api.model.Quantity;
-import io.fabric8.kubernetes.api.model.Secret;
-import io.fabric8.kubernetes.api.model.SecretBuilder;
 import io.fabric8.kubernetes.api.model.batch.v1.Job;
 import io.fabric8.kubernetes.api.model.batch.v1.JobBuilder;
 import lombok.RequiredArgsConstructor;
@@ -26,114 +19,42 @@ import lombok.RequiredArgsConstructor;
 @RequiredArgsConstructor
 public class JuicefsResourceBuilder {
 
-    public static final String DATA_SOURCE_ID_LABEL = "gpu-hub/data-source-id";
-    public static final String OWNER_LABEL = "gpu-hub/owner";
-    public static final String OWNER_VALUE = "data-source";
-    public static final String JFS_NAME_LABEL = "juicefs-name";
-    public static final String JFS_VOLUME_NAME = "jfs-volume";
+    public static final String DATA_SOURCE_ID_LABEL = K8sLabels.DATA_SOURCE_ID;
+    public static final String JFS_VOLUME_NAME = "team-data";
     public static final String JFS_MOUNT_PATH = "/data";
 
     private final JuicefsProperties properties;
     private final RandomK8sResourceNameGenerator nameGenerator;
 
-    public Names generateNames() {
-        String suffix = nameGenerator.generateString(5);
-        return new Names(
-                "jfs-secret-" + suffix,
-                "jfs-pv-" + suffix,
-                "jfs-migrate-" + suffix,
-                "jfs-" + suffix
-        );
+    public String generateJobName() {
+        return "jfs-migrate-" + nameGenerator.generateString(5);
     }
 
-    public Secret buildSecret(DataSource source, Cluster cluster, String namespace, Names names) {
-        return new SecretBuilder()
-                .withNewMetadata()
-                    .withName(names.secretName())
-                    .withNamespace(namespace)
-                    .withLabels(commonLabels(source))
-                .endMetadata()
-                .withType("Opaque")
-                .addToStringData("name", names.fsName())
-                .addToStringData("metaurl", cluster.getJuicefsMetaurl())
-                .addToStringData("storage", properties.getStorageType())
-                .addToStringData("bucket", source.getBucketUrl())
-                .addToStringData("access-key", source.getAccessKey())
-                .addToStringData("secret-key", source.getSecretKey())
-                .build();
-    }
-
-    public PersistentVolume buildPersistentVolume(DataSource source, String namespace, Names names) {
-        Map<String, String> labels = commonLabels(source);
-        labels.put(JFS_NAME_LABEL, names.fsName());
-
-        return new PersistentVolumeBuilder()
-                .withNewMetadata()
-                    .withName(names.pvName())
-                    .withLabels(labels)
-                .endMetadata()
-                .withNewSpec()
-                    .withCapacity(Map.of("storage", new Quantity(properties.getPvCapacity())))
-                    .withVolumeMode("Filesystem")
-                    .withAccessModes("ReadWriteMany")
-                    .withPersistentVolumeReclaimPolicy("Retain")
-                    .withNewCsi()
-                        .withDriver("csi.juicefs.com")
-                        .withVolumeHandle(names.pvName())
-                        .withFsType("juicefs")
-                        .withNewNodePublishSecretRef()
-                            .withName(names.secretName())
-                            .withNamespace(namespace)
-                        .endNodePublishSecretRef()
-                    .endCsi()
-                .endSpec()
-                .build();
-    }
-
-    public PersistentVolumeClaim buildPersistentVolumeClaim(DataSource source, String namespace,
-            String pvcName, Names names) {
-        return new PersistentVolumeClaimBuilder()
-                .withNewMetadata()
-                    .withName(pvcName)
-                    .withNamespace(namespace)
-                    .withLabels(commonLabels(source))
-                .endMetadata()
-                .withNewSpec()
-                    .withAccessModes("ReadWriteMany")
-                    .withVolumeMode("Filesystem")
-                    .withStorageClassName("")
-                    .withNewResources()
-                        .addToRequests("storage", new Quantity(properties.getPvCapacity()))
-                    .endResources()
-                    .withNewSelector()
-                        .addToMatchLabels(JFS_NAME_LABEL, names.fsName())
-                    .endSelector()
-                .endSpec()
-                .build();
-    }
-
-    public Job buildMigrationJob(DataSource source, String namespace, String pvcName,
-            String sourcePath, Names names) {
+    public Job buildMigrationJob(DataSource source, String namespace, String teamPvcName,
+            String sourcePath, String jobName) {
         BucketEndpoint endpoint = parseBucketUrl(source.getBucketUrl());
         String trimmedPath = sourcePath == null ? "" : sourcePath.trim();
         String pathSegment = trimmedPath.isEmpty() ? "" : trimmedPath.replaceAll("^/+|/+$", "") + "/";
+        String folder = source.getFolderName();
         String mcArgs = String.format(
-                "mc alias set src %s %s %s && mc cp -r src/%s/%s /data/",
+                "mc alias set src %s %s %s && mkdir -p /data/%s && mc cp -r src/%s/%s /data/%s/",
                 endpoint.endpoint(), source.getAccessKey(), source.getSecretKey(),
-                endpoint.bucket(), pathSegment
+                folder, endpoint.bucket(), pathSegment, folder
         );
+
+        Map<String, String> labels = buildLabels(source);
 
         return new JobBuilder()
                 .withNewMetadata()
-                    .withName(names.jobName())
+                    .withName(jobName)
                     .withNamespace(namespace)
-                    .withLabels(commonLabels(source))
+                    .withLabels(labels)
                 .endMetadata()
                 .withNewSpec()
                     .withBackoffLimit(properties.getBackoffLimit())
                     .withNewTemplate()
                         .withNewMetadata()
-                            .withLabels(commonLabels(source))
+                            .withLabels(labels)
                         .endMetadata()
                         .withNewSpec()
                             .withRestartPolicy("OnFailure")
@@ -150,7 +71,7 @@ public class JuicefsResourceBuilder {
                             .addNewVolume()
                                 .withName(JFS_VOLUME_NAME)
                                 .withNewPersistentVolumeClaim()
-                                    .withClaimName(pvcName)
+                                    .withClaimName(teamPvcName)
                                 .endPersistentVolumeClaim()
                             .endVolume()
                         .endSpec()
@@ -159,11 +80,15 @@ public class JuicefsResourceBuilder {
                 .build();
     }
 
-    private Map<String, String> commonLabels(DataSource source) {
-        return new java.util.HashMap<>(Map.of(
-                DATA_SOURCE_ID_LABEL, source.getId().toString(),
-                OWNER_LABEL, OWNER_VALUE
-        ));
+    private Map<String, String> buildLabels(DataSource source) {
+        Map<String, String> labels = K8sLabels.standard(
+                K8sLabels.OWNER_DATA_SOURCE,
+                source.getTeam().getName(),
+                source.getCluster().getName(),
+                source.getCreatedBy().getUsername());
+        labels.put(K8sLabels.DATA_SOURCE, K8sLabels.sanitize(source.getName()));
+        labels.put(K8sLabels.DATA_SOURCE_ID, source.getId().toString());
+        return labels;
     }
 
     private BucketEndpoint parseBucketUrl(String bucketUrl) {
@@ -182,8 +107,6 @@ public class JuicefsResourceBuilder {
             throw new IllegalArgumentException("Invalid bucket_url: " + bucketUrl, e);
         }
     }
-
-    public record Names(String secretName, String pvName, String jobName, String fsName) {}
 
     private record BucketEndpoint(String endpoint, String bucket) {}
 }

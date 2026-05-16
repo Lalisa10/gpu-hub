@@ -25,15 +25,14 @@ import type { PolicyDto, CreatePolicyRequest } from '@/api/types';
 import type { Column } from '@/components/shared/data-table';
 import { Plus, Trash2, AlertCircle, HelpCircle } from 'lucide-react';
 
-interface FormState extends CreatePolicyRequest {
-  nodeAffinity?: string;
+interface FormState extends Omit<CreatePolicyRequest, 'extra'> {
+  extra?: string;
 }
 
 const emptyForm: FormState = {
   clusterId: '',
   name: '',
-  priority: 50,
-  nodeAffinity: '',
+  extra: '',
 };
 
 interface ValidationErrors {
@@ -72,10 +71,6 @@ const validateForm = (form: FormState): ValidationErrors => {
     errors.memoryLimit = 'Must be a positive number or 0, -1';
   }
 
-  if (form.priority != null && form.priority < -1) {
-    errors.priority = 'Must be a positive number or 0, -1';
-  }
-
   if (form.gpuOverQuotaWeight != null && form.gpuOverQuotaWeight < -1) {
     errors.gpuOverQuotaWeight = 'Must be a positive number or 0, -1';
   }
@@ -86,15 +81,15 @@ const validateForm = (form: FormState): ValidationErrors => {
     errors.memoryOverQuotaWeight = 'Must be a positive number or 0, -1';
   }
 
-  // Validate node affinity JSON if provided
-  if (form.nodeAffinity?.trim()) {
+  // Validate extra JSON if provided
+  if (form.extra?.trim()) {
     try {
-      const parsed = JSON.parse(form.nodeAffinity);
+      const parsed = JSON.parse(form.extra);
       if (typeof parsed !== 'object' || parsed === null || Array.isArray(parsed)) {
-        errors.nodeAffinity = 'Must be a valid JSON object';
+        errors.extra = 'Must be a valid JSON object';
       }
     } catch {
-      errors.nodeAffinity = 'Invalid JSON format';
+      errors.extra = 'Invalid JSON format';
     }
   }
 
@@ -153,7 +148,6 @@ export default function PoliciesPage() {
     { header: 'GPU Quota', accessor: (p) => p.gpuQuota ?? '-' },
     { header: 'CPU Quota', accessor: (p) => p.cpuQuota ?? '-' },
     { header: 'Memory (MiB)', accessor: (p) => p.memoryQuota ?? '-' },
-    { header: 'Priority', accessor: 'priority' },
     {
       header: '',
       accessor: (p) => (
@@ -182,7 +176,7 @@ export default function PoliciesPage() {
 
     const submitData: CreatePolicyRequest = {
       ...form,
-      nodeAffinity: form.nodeAffinity ? JSON.parse(form.nodeAffinity) : undefined,
+      extra: form.extra ? JSON.parse(form.extra) : undefined,
     };
 
     await createPolicy.mutateAsync(submitData);
@@ -370,25 +364,9 @@ export default function PoliciesPage() {
               </div>
             </div>
 
-            {/* Scheduling & Priority Section */}
+            {/* Over-Quota Weights Section */}
             <div className="space-y-4">
-              <h3 className="text-sm font-semibold text-foreground">Scheduling & Priority</h3>
-              <div className="grid grid-cols-1 gap-4">
-                <FieldGroup
-                  label="Priority"
-                  error={errors.priority}
-                  helperText="Queue priority (higher = urgent)"
-                >
-                  <Input
-                    type="number"
-                    placeholder="50"
-                    value={form.priority}
-                    onChange={(e) => updateField('priority', +e.target.value)}
-                    min="0"
-                    className={errors.priority ? 'border-destructive' : ''}
-                  />
-                </FieldGroup>
-              </div>
+              <h3 className="text-sm font-semibold text-foreground">Scheduling</h3>
 
               <div className="space-y-2">
                 <h4 className="text-xs font-medium text-muted-foreground">Over-Quota Weights</h4>
@@ -455,15 +433,15 @@ export default function PoliciesPage() {
               <h3 className="text-sm font-semibold text-foreground">Advanced Settings</h3>
 
               <FieldGroup
-                label="Node Affinity (JSON)"
-                error={errors.nodeAffinity}
-                helperText="Kubernetes node affinity rules in JSON format. Leave empty for no affinity constraints."
+                label="Extra (JSON)"
+                error={errors.extra}
+                helperText="Free-form JSON for scheduler hints, node affinity, or other extensions. Leave empty if not needed."
               >
                 <Textarea
-                  placeholder={'{\n  "requiredDuringSchedulingIgnoredDuringExecution": {\n    "nodeSelectorTerms": []\n  }\n}'}
-                  value={form.nodeAffinity ?? ''}
-                  onChange={(e) => updateField('nodeAffinity', e.target.value)}
-                  className={`font-mono text-xs ${errors.nodeAffinity ? 'border-destructive' : ''}`}
+                  placeholder={'{\n  "nodeAffinity": {\n    "requiredDuringSchedulingIgnoredDuringExecution": {\n      "nodeSelectorTerms": []\n    }\n  }\n}'}
+                  value={form.extra ?? ''}
+                  onChange={(e) => updateField('extra', e.target.value)}
+                  className={`font-mono text-xs ${errors.extra ? 'border-destructive' : ''}`}
                   rows={4}
                 />
               </FieldGroup>

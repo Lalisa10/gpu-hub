@@ -7,6 +7,7 @@ import java.util.UUID;
 public record CreateTeamClusterRequest(
         @NotNull UUID teamId,
         @NotNull UUID clusterId,
-        @NotNull UUID policyId
+        @NotNull UUID policyId,
+        String pvcSize
 ) {
 }

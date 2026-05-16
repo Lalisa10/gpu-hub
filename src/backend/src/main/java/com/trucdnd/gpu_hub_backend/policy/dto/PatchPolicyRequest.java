@@ -13,7 +13,6 @@ public record PatchPolicyRequest(
         Optional<UUID> clusterId,
         Optional<@NotBlank String> name,
         Optional<String> description,
-        Optional<Integer> priority,
         Optional<BigDecimal> gpuQuota,
         Optional<BigDecimal> cpuQuota,
         Optional<Long> memoryQuota,
@@ -23,7 +22,6 @@ public record PatchPolicyRequest(
         Optional<Integer> gpuOverQuotaWeight,
         Optional<Integer> cpuOverQuotaWeight,
         Optional<Integer> memoryOverQuotaWeight,
-        Optional<Map<String, Object>> nodeAffinity,
-        Optional<String[]> gpuTypes
+        Optional<Map<String, Object>> extra
 ) {
 }

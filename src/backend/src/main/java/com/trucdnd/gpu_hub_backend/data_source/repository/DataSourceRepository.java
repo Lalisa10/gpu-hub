@@ -12,10 +12,12 @@ import java.util.UUID;
 
 public interface DataSourceRepository extends JpaRepository<DataSource, UUID> {
 
-    List<DataSource> findByVolume_Id(UUID volumeId);
+    List<DataSource> findByTeam_Id(UUID teamId);
 
-    List<DataSource> findByVolume_Team_IdIn(Collection<UUID> teamIds);
+    List<DataSource> findByTeam_IdIn(Collection<UUID> teamIds);
 
-    @Query("select s.volume.team.id from DataSource s where s.id = :sourceId")
+    boolean existsByTeam_IdAndName(UUID teamId, String name);
+
+    @Query("select s.team.id from DataSource s where s.id = :sourceId")
     Optional<UUID> findTeamIdBySourceId(@Param("sourceId") UUID sourceId);
 }

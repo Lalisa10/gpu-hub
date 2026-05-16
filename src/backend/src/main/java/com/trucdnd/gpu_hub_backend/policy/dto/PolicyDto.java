@@ -10,7 +10,6 @@ public record PolicyDto(
         UUID clusterId,
         String name,
         String description,
-        Integer priority,
         BigDecimal gpuQuota,
         BigDecimal cpuQuota,
         Long memoryQuota,
@@ -20,8 +19,7 @@ public record PolicyDto(
         Integer gpuOverQuotaWeight,
         Integer cpuOverQuotaWeight,
         Integer memoryOverQuotaWeight,
-        Map<String, Object> nodeAffinity,
-        String[] gpuTypes,
+        Map<String, Object> extra,
         OffsetDateTime createdAt,
         OffsetDateTime updatedAt
 ) {

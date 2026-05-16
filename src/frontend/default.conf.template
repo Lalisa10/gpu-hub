@@ -1,10 +1,10 @@
-upstream backend {
-    server ${BACKEND_HOST}:${BACKEND_PORT};
-}
-
 server {
     listen 80;
     server_name _;
+
+    # Cluster DNS resolver. NGINX_RESOLVER is populated at container start by
+    # /docker-entrypoint.d/10-extract-resolver.envsh from /etc/resolv.conf.
+    resolver ${NGINX_RESOLVER} valid=10s ipv6=off;
 
     root /usr/share/nginx/html;
     index index.html;
@@ -14,9 +14,13 @@ server {
         try_files $uri $uri/ /index.html;
     }
 
-    # Proxy API + SSE to backend
+    # Proxy API + SSE to backend.
+    # Using a variable in proxy_pass forces nginx to re-resolve DNS per request
+    # (subject to `resolver` TTL), so Service ClusterIP changes are picked up
+    # automatically — no need to restart the frontend pod.
     location /api/ {
-        proxy_pass         http://backend;
+        set $backend_upstream "${BACKEND_HOST}:${BACKEND_PORT}";
+        proxy_pass         http://$backend_upstream;
         proxy_http_version 1.1;
         proxy_set_header   Host              $host;
         proxy_set_header   X-Real-IP         $remote_addr;

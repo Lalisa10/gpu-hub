@@ -40,4 +40,7 @@ public class TeamCluster extends MutableEntity {
 
     @Column(name = "namespace", nullable = false)
     private String namespace;
+
+    @Column(name = "pvc_size", nullable = false)
+    private String pvcSize;
 }

@@ -11,7 +11,6 @@ public record CreatePolicyRequest(
         @NotNull UUID clusterId,
         @NotBlank String name,
         String description,
-        @NotNull Integer priority,
         BigDecimal gpuQuota,
         BigDecimal cpuQuota,
         Long memoryQuota,
@@ -21,7 +20,6 @@ public record CreatePolicyRequest(
         Integer gpuOverQuotaWeight,
         Integer cpuOverQuotaWeight,
         Integer memoryOverQuotaWeight,
-        Map<String, Object> nodeAffinity,
-        String[] gpuTypes
+        Map<String, Object> extra
 ) {
 }

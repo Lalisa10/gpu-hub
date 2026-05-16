@@ -35,9 +35,6 @@ public class Policy extends MutableEntity {
     @Column(name = "description")
     private String description;
 
-    @Column(name = "priority", nullable = false)
-    private Integer priority;
-
     @Column(name = "gpu_quota", precision = 10, scale = 2)
     private BigDecimal gpuQuota;
 
@@ -65,11 +62,7 @@ public class Policy extends MutableEntity {
     @Column(name = "memory_over_quota_weight")
     private Integer memoryOverQuotaWeight;
 
-    @Column(name = "node_affinity", columnDefinition = "jsonb")
+    @Column(name = "extra", columnDefinition = "jsonb")
     @JdbcTypeCode(SqlTypes.JSON)
-    private Map<String, Object> nodeAffinity;
-
-    @Column(name = "gpu_types", columnDefinition = "text[]")
-    @JdbcTypeCode(SqlTypes.ARRAY)
-    private String[] gpuTypes;
+    private Map<String, Object> extra;
 }

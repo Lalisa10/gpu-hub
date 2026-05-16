@@ -70,7 +70,6 @@ export interface ClusterDto {
   name: string;
   description: string | null;
   status: ClusterStatus;
-  juicefsMetaurl: string | null;
   createdAt: string;
   updatedAt: string;
 }
@@ -79,7 +78,6 @@ export interface JoinClusterRequest {
   name: string;
   description?: string;
   kubeconfigRef?: string;
-  juicefsMetaurl?: string;
 }
 
 export interface PatchClusterRequest {
@@ -87,19 +85,25 @@ export interface PatchClusterRequest {
   description?: string;
   kubeconfigRef?: string;
   status?: ClusterStatus;
-  juicefsMetaurl?: string;
 }
 
 // ─── Cluster Details ───────────────────────────────────
 
+export type NodeStatus = 'Ready' | 'NotReady' | 'Pressure';
+
 export interface NodeInfoDto {
   name: string;
-  ready: boolean;
+  status: NodeStatus;
   cpuCapacityMillis: number;
   cpuAllocatableMillis: number;
+  cpuRequestMillis: number;
+  cpuLimitMillis: number;
   ramCapacityBytes: number;
   ramAllocatableBytes: number;
+  ramRequestBytes: number;
+  ramLimitBytes: number;
   gpuTotal: number;
+  gpuAllocated: number;
   gpuModel: string | null;
 }
 
@@ -137,7 +141,6 @@ export interface PolicyDto {
   clusterId: string;
   name: string;
   description: string | null;
-  priority: number;
   gpuQuota: number | null;
   cpuQuota: number | null;
   memoryQuota: number | null;
@@ -147,8 +150,7 @@ export interface PolicyDto {
   gpuOverQuotaWeight: number | null;
   cpuOverQuotaWeight: number | null;
   memoryOverQuotaWeight: number | null;
-  nodeAffinity: string | null;
-  gpuTypes: string[] | null;
+  extra: string | null;
   createdAt: string;
   updatedAt: string;
 }
@@ -157,7 +159,6 @@ export interface CreatePolicyRequest {
   clusterId: string;
   name: string;
   description?: string;
-  priority: number;
   gpuQuota?: number;
   cpuQuota?: number;
   memoryQuota?: number;
@@ -167,8 +168,7 @@ export interface CreatePolicyRequest {
   gpuOverQuotaWeight?: number;
   cpuOverQuotaWeight?: number;
   memoryOverQuotaWeight?: number;
-  nodeAffinity?: string;
-  gpuTypes?: string[];
+  extra?: string;
 }
 
 export interface UpdatePolicyRequest extends CreatePolicyRequest {}
@@ -217,6 +217,7 @@ export interface TeamClusterDto {
   clusterId: string;
   policyId: string;
   namespace: string;
+  pvcSize: string;
   createdAt: string;
   updatedAt: string;
 }
@@ -225,12 +226,14 @@ export interface CreateTeamClusterRequest {
   teamId: string;
   clusterId: string;
   policyId: string;
+  pvcSize?: string;
 }
 
 export interface UpdateTeamClusterRequest {
   teamId: string;
   clusterId: string;
   policyId: string;
+  pvcSize?: string;
 }
 
 // ─── Project ───────────────────────────────────────────
@@ -255,25 +258,6 @@ export interface CreateProjectRequest {
 
 export interface UpdateProjectRequest extends CreateProjectRequest {}
 
-// ─── Data Volume ───────────────────────────────────────
-export type VolumeType = 'dynamic' | 'source';
-
-export interface DataVolumeDto {
-  id: string;
-  teamId: string;
-  clusterId: string;
-  createdById: string;
-  pvcName: string;
-  volumeType: VolumeType;
-  createdAt: string;
-  updatedAt: string;
-}
-
-export interface AttachVolumeRequest {
-  volumeId: string;
-  mountPath: string;
-}
-
 // ─── Data Source ───────────────────────────────────────
 export type DataSourceStatus = 'formating' | 'formated';
 
@@ -282,8 +266,8 @@ export interface DataSourceDto {
   clusterId: string;
   teamId: string;
   createdById: string;
-  volumeId: string;
-  pvcName: string;
+  name: string;
+  folderName: string;
   status: DataSourceStatus;
   bucketUrl: string;
   accessKey: string;
@@ -295,11 +279,24 @@ export interface CreateDataSourceRequest {
   clusterId: string;
   createdById: string;
   teamId: string;
-  pvcName: string;
+  name: string;
   bucketUrl: string;
   accessKey: string;
   secretKey: string;
   sourcePath?: string;
+}
+
+// ─── Workload Source (join) ────────────────────────────
+export interface AttachSourceRequest {
+  sourceId: string;
+  mountPath: string;
+}
+
+export interface WorkloadSourceDto {
+  workloadId: string;
+  sourceId: string;
+  sourceName: string;
+  mountPath: string;
 }
 
 // ─── Workload ──────────────────────────────────────────
@@ -316,7 +313,6 @@ export interface WorkloadDto {
   requestedCpu: number;
   requestedMemory: number;
   status: WorkloadStatus;
-  queuedAt: string | null;
   startedAt: string | null;
   finishedAt: string | null;
   extra: string | null;
@@ -335,7 +331,7 @@ export interface CreateWorkloadRequest {
   requestedCpu: number;
   requestedMemory: number;
   extra?: string;
-  volumes?: AttachVolumeRequest[];
+  sources?: AttachSourceRequest[];
 }
 
 // ─── Pod ───────────────────────────────────────────────

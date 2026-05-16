@@ -25,73 +25,132 @@ import {
   useClusterDetailsStream,
 } from '@/api/hooks/use-clusters';
 import { clusterService } from '@/api/services/clusters';
-import type { ClusterDetailsDto, ClusterDto, ClusterStatus, GpuInfoDto, NodeInfoDto } from '@/api/types';
+import type {
+  ClusterDetailsDto,
+  ClusterDto,
+  ClusterStatus,
+  NodeInfoDto,
+  NodeStatus,
+} from '@/api/types';
 import type { Column } from '@/components/shared/data-table';
 import { Loader2, Plus, Trash2, Upload } from 'lucide-react';
 import { toast } from 'sonner';
 
 // ─── Sub-components ────────────────────────────────────
 
-function ProgressRow({ label, pct, detail }: { label: string; pct: number; detail?: string }) {
+const NODE_STATUS_CLASS: Record<NodeStatus, string> = {
+  Ready: 'bg-green-100 text-green-700',
+  NotReady: 'bg-red-100 text-red-700',
+  Pressure: 'bg-amber-100 text-amber-700',
+};
+
+function formatBytes(bytes: number): string {
+  if (bytes <= 0) return '0 B';
+  const units = ['B', 'KiB', 'MiB', 'GiB', 'TiB'];
+  let v = bytes;
+  let i = 0;
+  while (v >= 1024 && i < units.length - 1) {
+    v /= 1024;
+    i++;
+  }
+  return `${v.toFixed(v >= 100 ? 0 : 1)} ${units[i]}`;
+}
+
+function formatCpu(millis: number): string {
+  const cores = millis / 1000;
+  return `${cores.toFixed(cores >= 10 ? 0 : 1)} cores`;
+}
+
+function NodeCard({ node, expanded, onToggle }: {
+  node: NodeInfoDto;
+  expanded: boolean;
+  onToggle: () => void;
+}) {
+  const gpuPct = node.gpuTotal > 0 ? (node.gpuAllocated / node.gpuTotal) * 100 : 0;
+
   return (
-    <div>
-      <div className="mb-0.5 flex justify-between text-xs text-muted-foreground">
-        <span>{label}</span>
-        <span>{detail ?? `${pct.toFixed(1)}%`}</span>
-      </div>
-      <div className="h-1.5 w-full overflow-hidden rounded-full bg-muted">
-        <div
-          className="h-full rounded-full bg-foreground"
-          style={{ width: `${Math.min(pct, 100)}%` }}
-        />
-      </div>
+    <div className="overflow-hidden rounded-lg border bg-card">
+      <button
+        type="button"
+        onClick={onToggle}
+        className="flex w-full items-center gap-6 px-5 py-4 text-left transition-colors hover:bg-muted/40"
+      >
+        {/* Name + status */}
+        <div className="flex min-w-[12rem] shrink-0 items-center gap-2.5">
+          <Badge className={NODE_STATUS_CLASS[node.status]}>{node.status}</Badge>
+          <span className="truncate text-sm font-medium">{node.name}</span>
+        </div>
+
+        {/* GPU utilization bar (grows) */}
+        <div className="min-w-0 flex-1">
+          <div className="mb-1 flex justify-between text-[11px] text-muted-foreground">
+            <span>GPU Allocated</span>
+            <span>
+              {node.gpuAllocated} / {node.gpuTotal} GPU{node.gpuTotal !== 1 ? 's' : ''}
+            </span>
+          </div>
+          <div className="h-2 w-full overflow-hidden rounded-full bg-muted">
+            <div
+              className="h-full rounded-full bg-foreground"
+              style={{ width: `${Math.min(gpuPct, 100)}%` }}
+            />
+          </div>
+        </div>
+
+        {/* GPU type */}
+        <div className="min-w-[14rem] shrink-0 text-right">
+          <p className="text-[10px] uppercase tracking-wide text-muted-foreground">GPU Type</p>
+          <p className="truncate text-xs">
+            {node.gpuModel ?? (node.gpuTotal > 0 ? 'Unknown' : 'No GPU')}
+          </p>
+        </div>
+      </button>
+      {expanded && <NodeResourceTable node={node} />}
     </div>
   );
 }
 
-function NodeCard({ node }: { node: NodeInfoDto }) {
-  const cpuUsedPct =
-    node.cpuCapacityMillis > 0
-      ? ((node.cpuCapacityMillis - node.cpuAllocatableMillis) / node.cpuCapacityMillis) * 100
-      : 0;
-  const ramUsedPct =
-    node.ramCapacityBytes > 0
-      ? ((node.ramCapacityBytes - node.ramAllocatableBytes) / node.ramCapacityBytes) * 100
-      : 0;
-  const ramCapGiB = (node.ramCapacityBytes / 1024 ** 3).toFixed(0);
-  const ramUsedGiB = ((node.ramCapacityBytes - node.ramAllocatableBytes) / 1024 ** 3).toFixed(1);
-  const cpuCores = (node.cpuCapacityMillis / 1000).toFixed(0);
-  const cpuUsedCores = ((node.cpuCapacityMillis - node.cpuAllocatableMillis) / 1000).toFixed(1);
+function NodeResourceTable({ node }: { node: NodeInfoDto }) {
+  const cpuUtil = node.cpuCapacityMillis > 0 ? (node.cpuRequestMillis / node.cpuCapacityMillis) * 100 : 0;
+  const ramUtil = node.ramCapacityBytes > 0 ? (node.ramRequestBytes / node.ramCapacityBytes) * 100 : 0;
+  const gpuUtil = node.gpuTotal > 0 ? (node.gpuAllocated / node.gpuTotal) * 100 : 0;
 
   return (
-    <div className="min-w-[200px] space-y-2 rounded-lg border p-3">
-      <div className="flex items-center justify-between gap-2">
-        <span className="truncate text-xs font-medium">{node.name}</span>
-        <Badge className={node.ready ? 'bg-green-100 text-green-700' : 'bg-red-100 text-red-700'}>
-          {node.ready ? 'Ready' : 'NotReady'}
-        </Badge>
-      </div>
-      <ProgressRow label="CPU Allocated" pct={cpuUsedPct} detail={`${cpuUsedCores} / ${cpuCores} cores`} />
-      <ProgressRow label="RAM Allocated" pct={ramUsedPct} detail={`${ramUsedGiB} / ${ramCapGiB} GiB`} />
-      <p className="text-xs text-muted-foreground">
-        {node.gpuTotal} GPU{node.gpuTotal !== 1 ? 's' : ''}
-        {node.gpuModel ? ` · ${node.gpuModel}` : ''}
-      </p>
-    </div>
-  );
-}
-
-function GpuCard({ gpu }: { gpu: GpuInfoDto }) {
-  const statusClass =
-    gpu.gpuStatus === 'In Use' ? 'bg-green-100 text-green-700' : 'bg-gray-100 text-gray-600';
-  return (
-    <div className="space-y-1.5 rounded-lg border p-3">
-      <div className="flex items-center justify-between">
-        <span className="text-xs font-semibold">GPU {gpu.index}</span>
-        <Badge className={statusClass}>{gpu.gpuStatus}</Badge>
-      </div>
-      <p className="text-xs text-muted-foreground">{gpu.model ?? 'Unknown model'}</p>
-      <p className="text-xs text-muted-foreground">{gpu.nodeName}</p>
+    <div className="border-t bg-muted/30 px-4 py-3">
+      <table className="w-full text-xs">
+        <thead>
+          <tr className="border-b text-muted-foreground">
+            <th className="pb-2 text-left font-medium">Resource</th>
+            <th className="pb-2 text-right font-medium">Request</th>
+            <th className="pb-2 text-right font-medium">Limit</th>
+            <th className="pb-2 text-right font-medium">Capacity</th>
+            <th className="pb-2 text-right font-medium">Utilization</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr className="border-b last:border-0">
+            <td className="py-2 font-medium">CPU</td>
+            <td className="py-2 text-right">{formatCpu(node.cpuRequestMillis)}</td>
+            <td className="py-2 text-right">{formatCpu(node.cpuLimitMillis)}</td>
+            <td className="py-2 text-right">{formatCpu(node.cpuCapacityMillis)}</td>
+            <td className="py-2 text-right">{cpuUtil.toFixed(1)}%</td>
+          </tr>
+          <tr className="border-b last:border-0">
+            <td className="py-2 font-medium">RAM</td>
+            <td className="py-2 text-right">{formatBytes(node.ramRequestBytes)}</td>
+            <td className="py-2 text-right">{formatBytes(node.ramLimitBytes)}</td>
+            <td className="py-2 text-right">{formatBytes(node.ramCapacityBytes)}</td>
+            <td className="py-2 text-right">{ramUtil.toFixed(1)}%</td>
+          </tr>
+          <tr>
+            <td className="py-2 font-medium">GPU</td>
+            <td className="py-2 text-right">{node.gpuAllocated} Units</td>
+            <td className="py-2 text-right">{node.gpuAllocated} Units</td>
+            <td className="py-2 text-right">{node.gpuTotal} Units</td>
+            <td className="py-2 text-right">{gpuUtil.toFixed(1)}%</td>
+          </tr>
+        </tbody>
+      </table>
     </div>
   );
 }
@@ -106,33 +165,35 @@ function formatAge(startedAt: string | null): string {
 }
 
 function ClusterDetailBody({ details }: { details: ClusterDetailsDto }) {
+  const [expandedNode, setExpandedNode] = useState<string | null>(null);
+
   return (
-    <div className="space-y-8 px-6 py-6">
-      {/* Section 1: Node Overview */}
+    <div className="space-y-8 px-8 py-6">
+      {/* Section 1: Nodes */}
       <section>
-        <h3 className="mb-3 text-sm font-semibold">Node Overview</h3>
-        <div className="flex gap-3 overflow-x-auto pb-1">
-          {details.nodes.length === 0 ? (
-            <p className="text-xs text-muted-foreground">No nodes found.</p>
-          ) : (
-            details.nodes.map((n) => <NodeCard key={n.name} node={n} />)
-          )}
+        <div className="mb-3 flex items-baseline justify-between">
+          <h3 className="text-sm font-semibold">Nodes</h3>
+          <span className="text-xs text-muted-foreground">
+            {details.gpusInUse} / {details.gpusTotal} GPUs in use
+          </span>
         </div>
+        {details.nodes.length === 0 ? (
+          <p className="text-xs text-muted-foreground">No nodes found.</p>
+        ) : (
+          <div className="space-y-3">
+            {details.nodes.map((n) => (
+              <NodeCard
+                key={n.name}
+                node={n}
+                expanded={expandedNode === n.name}
+                onToggle={() => setExpandedNode(expandedNode === n.name ? null : n.name)}
+              />
+            ))}
+          </div>
+        )}
       </section>
 
-      {/* Section 2: GPU Status */}
-      <section>
-        <h3 className="mb-3 text-sm font-semibold">GPU Status</h3>
-        <div className="grid grid-cols-2 gap-3">
-          {details.gpus.length === 0 ? (
-            <p className="col-span-2 text-xs text-muted-foreground">No GPUs detected.</p>
-          ) : (
-            details.gpus.map((g) => <GpuCard key={`${g.nodeName}-${g.index}`} gpu={g} />)
-          )}
-        </div>
-      </section>
-
-      {/* Section 3: Active Workloads */}
+      {/* Section 2: Active Workloads */}
       <section>
         <h3 className="mb-3 text-sm font-semibold">Active Workloads</h3>
         {details.activeWorkloads.length === 0 ? (
@@ -182,7 +243,6 @@ export default function ClustersPage() {
     name: '',
     description: '',
     kubeconfigRef: '',
-    juicefsMetaurl: '',
   });
   const fileInputRef = useRef<HTMLInputElement>(null);
 
@@ -265,11 +325,10 @@ export default function ClustersPage() {
       name: form.name,
       description: form.description || undefined,
       kubeconfigRef: form.kubeconfigRef || undefined,
-      juicefsMetaurl: form.juicefsMetaurl || undefined,
     });
     toast.success(`Cluster "${form.name}" created`);
     setShowCreate(false);
-    setForm({ name: '', description: '', kubeconfigRef: '', juicefsMetaurl: '' });
+    setForm({ name: '', description: '', kubeconfigRef: '' });
   };
 
   const handleUpload = async () => {
@@ -312,17 +371,6 @@ export default function ClustersPage() {
                 onChange={(e) => setForm({ ...form, kubeconfigRef: e.target.value })}
                 placeholder="MinIO object key (optional — upload after creation)"
               />
-            </div>
-            <div className="space-y-2">
-              <Label>JuiceFS Metadata URL</Label>
-              <Input
-                value={form.juicefsMetaurl}
-                onChange={(e) => setForm({ ...form, juicefsMetaurl: e.target.value })}
-                placeholder="postgres://user:pass@host:5432/jfs (optional)"
-              />
-              <p className="text-xs text-muted-foreground">
-                Required only if this cluster will host JuiceFS data sources.
-              </p>
             </div>
             <div className="space-y-2">
               <Label>Description</Label>
@@ -401,7 +449,10 @@ export default function ClustersPage() {
 
       {/* Cluster Detail Drawer */}
       <Sheet open={!!drawerCluster} onOpenChange={(o) => !o && setDrawerCluster(null)}>
-        <SheetContent side="right" className="flex w-full flex-col gap-0 p-0 sm:max-w-[520px]">
+        <SheetContent
+          side="right"
+          className="flex flex-col gap-0 p-0 data-[side=right]:w-[80vw] data-[side=right]:sm:max-w-none data-[side=right]:lg:max-w-[1800px]"
+        >
           <SheetHeader className="border-b px-6 py-5">
             <div className="flex items-center gap-3">
               <SheetTitle className="text-lg">{drawerCluster?.name}</SheetTitle>

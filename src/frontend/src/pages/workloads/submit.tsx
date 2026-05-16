@@ -18,14 +18,9 @@ import { useCreateWorkload } from '@/api/hooks/use-workloads';
 import { useProjects } from '@/api/hooks/use-projects';
 import { useTeams } from '@/api/hooks/use-teams';
 import { useClusters } from '@/api/hooks/use-clusters';
-import { useDataVolumes } from '@/api/hooks/use-data-volumes';
-import type { AttachVolumeRequest } from '@/api/types';
+import { useMyDataSources } from '@/api/hooks/use-data-sources';
+import type { AttachSourceRequest } from '@/api/types';
 import { X, Plus } from 'lucide-react';
-
-interface NotebookExtra {
-  pvcSize: string;
-  gpuType: string;
-}
 
 interface EnvVar {
   key: string;
@@ -70,26 +65,27 @@ export default function SubmitWorkloadPage() {
   const [memRequest, setMemRequest] = useState(4096);
   const [error, setError] = useState('');
 
-  const [notebook, setNotebook] = useState<NotebookExtra>({ pvcSize: '10Gi', gpuType: '' });
   const [llm, setLlm] = useState<LlmInferenceExtra>({
     modelSource: '',
     vllmParams: '',
     replicaCount: 1,
     envVars: [],
   });
-  const [volumes, setVolumes] = useState<AttachVolumeRequest[]>([]);
+  const [sources, setSources] = useState<AttachSourceRequest[]>([]);
 
   const myTeamIds = isAdmin ? teams.map((t) => t.id) : teamMemberships.map((m) => m.teamId);
   const accessibleProjects = projects.filter((p) => myTeamIds.includes(p.teamId));
   const selectedProject = projects.find((p) => p.id === projectId);
 
-  const { data: teamVolumes = [] } = useDataVolumes(selectedProject?.teamId);
-  const availableVolumes = teamVolumes.filter(
-    (v) => v.clusterId === selectedProject?.clusterId,
+  const { data: mySources = [] } = useMyDataSources();
+  const availableSources = mySources.filter(
+    (s) =>
+      s.teamId === selectedProject?.teamId &&
+      s.clusterId === selectedProject?.clusterId,
   );
 
   useEffect(() => {
-    setVolumes([]);
+    setSources([]);
   }, [projectId]);
 
   const addEnvVar = () =>
@@ -102,22 +98,22 @@ export default function SubmitWorkloadPage() {
       envVars: prev.envVars.map((ev, idx) => (idx === i ? { ...ev, [field]: val } : ev)),
     }));
 
-  const addVolume = () =>
-    setVolumes((prev) => [...prev, { volumeId: '', mountPath: '' }]);
-  const removeVolume = (i: number) =>
-    setVolumes((prev) => prev.filter((_, idx) => idx !== i));
-  const updateVolume = (i: number, field: 'volumeId' | 'mountPath', val: string) =>
-    setVolumes((prev) =>
-      prev.map((v, idx) => (idx === i ? { ...v, [field]: val } : v)),
+  const addSource = () =>
+    setSources((prev) => [...prev, { sourceId: '', mountPath: '' }]);
+  const removeSource = (i: number) =>
+    setSources((prev) => prev.filter((_, idx) => idx !== i));
+  const updateSource = (i: number, field: 'sourceId' | 'mountPath', val: string) =>
+    setSources((prev) =>
+      prev.map((s, idx) => (idx === i ? { ...s, [field]: val } : s)),
     );
 
   const handleSubmit = async () => {
     if (!projectId || !name || !image || !user) return;
     setError('');
-    const extra = tab === 'notebook' ? JSON.stringify(notebook) : JSON.stringify(llm);
-    const cleanedVolumes = volumes
-      .filter((v) => v.volumeId && v.mountPath.trim())
-      .map((v) => ({ volumeId: v.volumeId, mountPath: v.mountPath.trim() }));
+    const extra = tab === 'notebook' ? undefined : JSON.stringify(llm);
+    const cleanedSources = sources
+      .filter((s) => s.sourceId && s.mountPath.trim())
+      .map((s) => ({ sourceId: s.sourceId, mountPath: s.mountPath.trim() }));
     try {
       await createWorkload.mutateAsync({
         projectId,
@@ -130,7 +126,7 @@ export default function SubmitWorkloadPage() {
         requestedCpu: cpuRequest,
         requestedMemory: memRequest,
         extra,
-        volumes: cleanedVolumes.length ? cleanedVolumes : undefined,
+        sources: cleanedSources.length ? cleanedSources : undefined,
       });
       navigate('/workloads');
     } catch (err: unknown) {
@@ -242,35 +238,35 @@ export default function SubmitWorkloadPage() {
             </div>
           </Section>
 
-          {/* Section 3 – Data Volumes (shared) */}
-          <Section title="Data Volumes">
+          {/* Section 3 – Data Sources (shared) */}
+          <Section title="Data Sources">
             {!selectedProject ? (
               <p className="text-[12px] text-muted-foreground">
-                Select a project to attach volumes.
+                Select a project to attach data sources.
               </p>
-            ) : availableVolumes.length === 0 ? (
+            ) : availableSources.length === 0 ? (
               <p className="text-[12px] text-muted-foreground">
-                No volumes available for this team and cluster.
+                No data sources available for this team and cluster.
               </p>
             ) : (
               <>
-                {volumes.length > 0 && (
+                {sources.length > 0 && (
                   <div className="mb-3 space-y-2">
                     <div className="grid grid-cols-[1fr_1fr_2rem] gap-2">
                       <span className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">
-                        Volume
+                        Source
                       </span>
                       <span className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">
                         Mount Path
                       </span>
                       <span />
                     </div>
-                    {volumes.map((row, i) => {
-                      const optionList = availableVolumes.filter(
-                        (vol) =>
-                          vol.id === row.volumeId ||
-                          !volumes.some(
-                            (other, j) => j !== i && other.volumeId === vol.id,
+                    {sources.map((row, i) => {
+                      const optionList = availableSources.filter(
+                        (src) =>
+                          src.id === row.sourceId ||
+                          !sources.some(
+                            (other, j) => j !== i && other.sourceId === src.id,
                           ),
                       );
                       return (
@@ -279,27 +275,27 @@ export default function SubmitWorkloadPage() {
                           className="grid grid-cols-[1fr_1fr_2rem] items-center gap-2"
                         >
                           <Select
-                            value={row.volumeId}
-                            onValueChange={(v) => v && updateVolume(i, 'volumeId', v)}
+                            value={row.sourceId}
+                            onValueChange={(v) => v && updateSource(i, 'sourceId', v)}
                           >
                             <SelectTrigger className={INPUT_CLS}>
-                              {row.volumeId ? (
+                              {row.sourceId ? (
                                 <span>
-                                  {availableVolumes.find((v) => v.id === row.volumeId)
-                                    ?.pvcName ?? '—'}
+                                  {availableSources.find((s) => s.id === row.sourceId)
+                                    ?.name ?? '—'}
                                 </span>
                               ) : (
                                 <span className="text-muted-foreground">
-                                  Select volume
+                                  Select source
                                 </span>
                               )}
                             </SelectTrigger>
                             <SelectContent>
-                              {optionList.map((vol) => (
-                                <SelectItem key={vol.id} value={vol.id}>
-                                  {vol.pvcName}
-                                  <span className="ml-2 text-[10px] text-muted-foreground">
-                                    {vol.volumeType}
+                              {optionList.map((src) => (
+                                <SelectItem key={src.id} value={src.id}>
+                                  {src.name}
+                                  <span className="ml-2 font-mono text-[10px] italic text-muted-foreground">
+                                    /{src.folderName}
                                   </span>
                                 </SelectItem>
                               ))}
@@ -309,7 +305,7 @@ export default function SubmitWorkloadPage() {
                             className={INPUT_CLS}
                             value={row.mountPath}
                             onChange={(e) =>
-                              updateVolume(i, 'mountPath', e.target.value)
+                              updateSource(i, 'mountPath', e.target.value)
                             }
                             placeholder="/data"
                           />
@@ -317,7 +313,7 @@ export default function SubmitWorkloadPage() {
                             variant="ghost"
                             size="icon"
                             className="h-8 w-8 shrink-0 text-muted-foreground hover:text-destructive"
-                            onClick={() => removeVolume(i)}
+                            onClick={() => removeSource(i)}
                           >
                             <X className="h-3.5 w-3.5" />
                           </Button>
@@ -328,41 +324,15 @@ export default function SubmitWorkloadPage() {
                 )}
                 <button
                   type="button"
-                  onClick={addVolume}
+                  onClick={addSource}
                   className="flex w-full items-center justify-center gap-1.5 rounded-lg border border-dashed border-border py-2.5 text-[12px] text-muted-foreground transition-colors hover:border-foreground/30 hover:text-foreground"
                 >
                   <Plus className="h-3.5 w-3.5" />
-                  Add volume
+                  Add source
                 </button>
               </>
             )}
           </Section>
-
-          {/* Notebook-specific */}
-          <TabsContent value="notebook">
-            <Section title="Notebook Configuration">
-              <div className="grid grid-cols-2 gap-4">
-                <div className="space-y-1.5">
-                  <Label className={LABEL_CLS}>PVC Size</Label>
-                  <Input
-                    className={INPUT_CLS}
-                    value={notebook.pvcSize}
-                    onChange={(e) => setNotebook({ ...notebook, pvcSize: e.target.value })}
-                    placeholder="10Gi"
-                  />
-                </div>
-                <div className="space-y-1.5">
-                  <Label className={LABEL_CLS}>GPU Type (optional)</Label>
-                  <Input
-                    className={INPUT_CLS}
-                    value={notebook.gpuType}
-                    onChange={(e) => setNotebook({ ...notebook, gpuType: e.target.value })}
-                    placeholder="nvidia.com/gpu"
-                  />
-                </div>
-              </div>
-            </Section>
-          </TabsContent>
 
           {/* LLM-specific */}
           <TabsContent value="llm">

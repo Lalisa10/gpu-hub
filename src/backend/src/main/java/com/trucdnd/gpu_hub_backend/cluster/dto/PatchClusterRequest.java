@@ -12,6 +12,5 @@ public record PatchClusterRequest(
     Optional<@NotBlank String> name,
     Optional<String> description,
     Optional<@NotBlank String> kubeconfigRef,
-    Optional<Cluster.Status> status,
-    Optional<String> juicefsMetaurl
+    Optional<Cluster.Status> status
 ) {}

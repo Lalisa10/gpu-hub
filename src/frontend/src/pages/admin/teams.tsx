@@ -64,7 +64,7 @@ export default function TeamsPage() {
   const [showAddCluster, setShowAddCluster] = useState(false);
   const [teamForm, setTeamForm] = useState({ name: '', description: '' });
   const [memberForm, setMemberForm] = useState({ userId: '', role: 'MEMBER' as TeamRole });
-  const [tcForm, setTcForm] = useState({ clusterId: '', policyId: '' });
+  const [tcForm, setTcForm] = useState({ clusterId: '', policyId: '', pvcSize: '' });
 
   const teamColumns: Column<TeamDto>[] = [
     { header: 'Name', accessor: 'name' },
@@ -153,6 +153,7 @@ export default function TeamsPage() {
       accessor: (tc) => policies.find((p) => p.id === tc.policyId)?.name ?? tc.policyId.slice(0, 8),
     },
     { header: 'Namespace', accessor: 'namespace' },
+    { header: 'PVC Size', accessor: 'pvcSize' },
     {
       header: '',
       accessor: (tc) => (
@@ -360,6 +361,17 @@ export default function TeamsPage() {
                 </SelectContent>
               </Select>
             </div>
+            <div className="space-y-2">
+              <Label>PVC Size</Label>
+              <Input
+                placeholder="10Gi"
+                value={tcForm.pvcSize}
+                onChange={(e) => setTcForm({ ...tcForm, pvcSize: e.target.value })}
+              />
+              <p className="text-xs text-muted-foreground">
+                Capacity of the team's JuiceFS-backed PVC. Leave blank to use default <code className="font-mono">10Gi</code>.
+              </p>
+            </div>
             <p className="text-xs text-muted-foreground">
               The Kubernetes namespace will be auto-generated from the team name
               (<code className="font-mono">gpuhub-team-&lt;sanitized-team-name&gt;</code>).
@@ -374,9 +386,10 @@ export default function TeamsPage() {
                     teamId: selectedTeam.id,
                     clusterId: tcForm.clusterId,
                     policyId: tcForm.policyId,
+                    pvcSize: tcForm.pvcSize.trim() || undefined,
                   });
                   setShowAddCluster(false);
-                  setTcForm({ clusterId: '', policyId: '' });
+                  setTcForm({ clusterId: '', policyId: '', pvcSize: '' });
                 }
               }}
               disabled={createTC.isPending || !tcForm.clusterId || !tcForm.policyId}

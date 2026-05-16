@@ -12,8 +12,8 @@ import lombok.Setter;
 @Setter
 public class JuicefsProperties {
 
-    private String storageType = "minio";
-    private String pvCapacity = "10Pi";
+    private String storageClass = "juicefs-sc";
+    private String pvcSize = "10Gi";
     private String migrationImage = "minio/mc:latest";
     private int backoffLimit = 3;
 }

@@ -2,8 +2,11 @@ package com.trucdnd.gpu_hub_backend.team.service;
 
 import com.trucdnd.gpu_hub_backend.cluster.entity.Cluster;
 import com.trucdnd.gpu_hub_backend.cluster.repository.ClusterRepository;
+import com.trucdnd.gpu_hub_backend.common.security.UserPrincipal;
+import com.trucdnd.gpu_hub_backend.data_source.config.JuicefsProperties;
 import com.trucdnd.gpu_hub_backend.kubernetes.service.BuiltinResourceService;
 import com.trucdnd.gpu_hub_backend.kubernetes.service.QueueService;
+import com.trucdnd.gpu_hub_backend.kubernetes.util.K8sLabels;
 import com.trucdnd.gpu_hub_backend.policy.entity.Policy;
 import com.trucdnd.gpu_hub_backend.policy.repository.PolicyRepository;
 import com.trucdnd.gpu_hub_backend.policy.service.QueueSpecBuilder;
@@ -17,9 +20,12 @@ import com.trucdnd.gpu_hub_backend.team.repository.TeamRepository;
 
 import jakarta.persistence.EntityNotFoundException;
 import lombok.RequiredArgsConstructor;
+import org.springframework.security.core.Authentication;
+import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.stereotype.Service;
 
 import java.util.List;
+import java.util.Map;
 import java.util.UUID;
 
 @Service
@@ -32,6 +38,7 @@ public class TeamClusterService {
     private final BuiltinResourceService kubernetesService;
     private final QueueService queueService;
     private final QueueSpecBuilder queueSpecBuilder;
+    private final JuicefsProperties juicefsProperties;
 
     public List<TeamClusterDto> findAll() {
         return teamClusterRepository.findAll().stream().map(this::toDto).toList();
@@ -44,10 +51,16 @@ public class TeamClusterService {
     public TeamClusterDto create(CreateTeamClusterRequest request) {
         TeamCluster teamCluster = new TeamCluster();
         apply(teamCluster, request.teamId(), request.clusterId(), request.policyId());
+        teamCluster.setPvcSize(request.pvcSize() != null && !request.pvcSize().isBlank()
+                ? request.pvcSize()
+                : juicefsProperties.getPvcSize());
+
         kubernetesService.createNamespace(teamCluster.getCluster(), teamCluster.getNamespace());
         queueService.create(teamCluster.getCluster(), queueSpecBuilder.buildTeamQueue(teamCluster));
 
-        return toDto(teamClusterRepository.save(teamCluster));
+        TeamCluster saved = teamClusterRepository.save(teamCluster);
+        createTeamPvc(saved);
+        return toDto(saved);
     }
 
     public TeamClusterDto update(UUID id, UpdateTeamClusterRequest request) {
@@ -59,12 +72,14 @@ public class TeamClusterService {
 
     public void delete(UUID id) {
         TeamCluster teamCluster = getTeamCluster(id);
+        Cluster cluster = clusterRepository.findById(teamCluster.getCluster().getId())
+                .orElseThrow(() -> new EntityNotFoundException("Cluster not found"));
+
+        kubernetesService.deletePersistentVolumeClaimsByLabel(
+                cluster, teamCluster.getNamespace(),
+                K8sLabels.TEAM_CLUSTER_ID, teamCluster.getId().toString());
 
         teamClusterRepository.delete(teamCluster);
-
-        Cluster cluster = clusterRepository.findById(teamCluster.getCluster().getId())
-                        .orElseThrow(() -> new EntityNotFoundException("Cluster not found"));
-
         kubernetesService.deleteNamespace(cluster, teamCluster.getNamespace());
     }
 
@@ -86,15 +101,56 @@ public class TeamClusterService {
         target.setNamespace(buildNamespace(team.getName()));
     }
 
+    private void createTeamPvc(TeamCluster teamCluster) {
+        String pvcName = buildPvcName(teamCluster.getTeam().getName());
+        if (kubernetesService.persistentVolumeClaimExists(
+                teamCluster.getCluster(), teamCluster.getNamespace(), pvcName)) {
+            return;
+        }
+        Map<String, String> labels = K8sLabels.standard(
+                K8sLabels.OWNER_TEAM_PVC,
+                teamCluster.getTeam().getName(),
+                teamCluster.getCluster().getName(),
+                currentUsername());
+        labels.put(K8sLabels.TEAM_CLUSTER_ID, teamCluster.getId().toString());
+
+        kubernetesService.createPersistentVolumeClaim(
+                teamCluster.getCluster(),
+                teamCluster.getNamespace(),
+                pvcName,
+                juicefsProperties.getStorageClass(),
+                teamCluster.getPvcSize(),
+                List.of("ReadWriteMany"),
+                labels);
+    }
+
     /** Generates the K8s namespace: {@code gpuhub-team-<sanitized-team-name>}. */
-    static String buildNamespace(String teamName) {
+    public static String buildNamespace(String teamName) {
+        String sanitized = sanitizeTeamName(teamName, 63 - "gpuhub-team-".length());
+        return "gpuhub-team-" + sanitized;
+    }
+
+    /** Generates the team PVC name: {@code gpuhub-team-<sanitized>-data}. */
+    public static String buildPvcName(String teamName) {
+        String suffix = "-data";
+        int budget = 63 - "gpuhub-team-".length() - suffix.length();
+        return "gpuhub-team-" + sanitizeTeamName(teamName, budget) + suffix;
+    }
+
+    private static String sanitizeTeamName(String teamName, int maxLength) {
         String sanitized = teamName.toLowerCase()
                 .replaceAll("[^a-z0-9]+", "-")
                 .replaceAll("^-+|-+$", "");
-        String prefix = "gpuhub-team-";
-        int maxSuffix = 63 - prefix.length();
-        if (sanitized.length() > maxSuffix) sanitized = sanitized.substring(0, maxSuffix);
-        return prefix + sanitized;
+        if (sanitized.length() > maxLength) sanitized = sanitized.substring(0, maxLength);
+        return sanitized.replaceAll("-+$", "");
+    }
+
+    private static String currentUsername() {
+        Authentication authentication = SecurityContextHolder.getContext().getAuthentication();
+        if (authentication != null && authentication.getPrincipal() instanceof UserPrincipal principal) {
+            return principal.getUsername();
+        }
+        return "system";
     }
 
     private TeamCluster getTeamCluster(UUID id) {
@@ -109,6 +165,7 @@ public class TeamClusterService {
                 entity.getCluster().getId(),
                 entity.getPolicy().getId(),
                 entity.getNamespace(),
+                entity.getPvcSize(),
                 entity.getCreatedAt(),
                 entity.getUpdatedAt()
         );

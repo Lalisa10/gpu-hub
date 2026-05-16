@@ -14,6 +14,8 @@ import io.fabric8.kubernetes.api.model.NamespaceBuilder;
 import io.fabric8.kubernetes.api.model.Node;
 import io.fabric8.kubernetes.api.model.PersistentVolume;
 import io.fabric8.kubernetes.api.model.PersistentVolumeClaim;
+import io.fabric8.kubernetes.api.model.PersistentVolumeClaimBuilder;
+import io.fabric8.kubernetes.api.model.Quantity;
 import io.fabric8.kubernetes.api.model.Pod;
 import io.fabric8.kubernetes.api.model.Secret;
 import io.fabric8.kubernetes.api.model.apps.Deployment;
@@ -116,6 +118,15 @@ public class BuiltinResourceService {
         }
     }
 
+    public List<Pod> listAllPods(Cluster cluster) {
+        try {
+            KubernetesClient client = clientFactory.createClient(cluster);
+            return client.pods().inAnyNamespace().list().getItems();
+        } catch (KubernetesClientException e) {
+            throw k8sError("list pods across all namespaces", cluster, e);
+        }
+    }
+
     // ── Pod logs ──────────────────────────────────────────────────────────────
 
     public String getPodLogs(Cluster cluster, String namespace, String podName) {
@@ -210,6 +221,26 @@ public class BuiltinResourceService {
         } catch (KubernetesClientException e) {
             throw k8sError("create persistent volume claim in namespace '" + namespace + "'", cluster, e);
         }
+    }
+
+    public PersistentVolumeClaim createPersistentVolumeClaim(Cluster cluster, String namespace,
+            String name, String storageClass, String size,
+            List<String> accessModes, Map<String, String> labels) {
+        PersistentVolumeClaim pvc = new PersistentVolumeClaimBuilder()
+                .withNewMetadata()
+                    .withName(name)
+                    .withNamespace(namespace)
+                    .withLabels(labels)
+                .endMetadata()
+                .withNewSpec()
+                    .withAccessModes(accessModes)
+                    .withStorageClassName(storageClass)
+                    .withNewResources()
+                        .addToRequests("storage", new Quantity(size))
+                    .endResources()
+                .endSpec()
+                .build();
+        return createPersistentVolumeClaim(cluster, namespace, pvc);
     }
 
     public boolean persistentVolumeClaimExists(Cluster cluster, String namespace, String name) {

@@ -3,6 +3,7 @@ package com.trucdnd.gpu_hub_backend.workload.service;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.HashMap;
+import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 
@@ -10,6 +11,7 @@ import org.springframework.stereotype.Component;
 
 import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.trucdnd.gpu_hub_backend.kubernetes.util.K8sLabels;
 import com.trucdnd.gpu_hub_backend.workload.dto.LlmInferenceExtra;
 import com.trucdnd.gpu_hub_backend.workload.dto.VolumeMountSpec;
 import com.trucdnd.gpu_hub_backend.workload.entity.Workload;
@@ -28,10 +30,12 @@ import io.fabric8.kubernetes.api.model.VolumeMount;
 import io.fabric8.kubernetes.api.model.VolumeMountBuilder;
 import io.fabric8.kubernetes.api.model.apps.Deployment;
 import io.fabric8.kubernetes.api.model.apps.DeploymentBuilder;
+
 @Component
 public class DeploymentSpecBuilder {
 
     private static final int VLLM_CONTAINER_PORT = 8000;
+    private static final String TEAM_DATA_VOLUME_NAME = "team-data";
 
     private final ObjectMapper objectMapper = new ObjectMapper();
 
@@ -50,10 +54,20 @@ public class DeploymentSpecBuilder {
         List<EnvVar> env = buildEnv(extra.envVars());
         ResourceRequirements resources = buildResources(workload);
 
+        Map<String, String> baseLabels = K8sLabels.standard(
+                K8sLabels.OWNER_WORKLOAD,
+                workload.getProject().getTeam().getName(),
+                workload.getCluster().getName(),
+                workload.getSubmittedBy().getUsername());
+        baseLabels.put(K8sLabels.PROJECT, K8sLabels.sanitize(workload.getProject().getName()));
+
         Map<String, String> selectorLabels = Map.of(
                 NotebookSpecBuilder.WORKLOAD_ID_LABEL, workload.getId().toString());
 
-        Map<String, String> podLabels = new HashMap<>();
+        Map<String, String> deploymentLabels = new LinkedHashMap<>(baseLabels);
+        deploymentLabels.put(NotebookSpecBuilder.WORKLOAD_ID_LABEL, workload.getId().toString());
+
+        Map<String, String> podLabels = new LinkedHashMap<>(baseLabels);
         podLabels.put(NotebookSpecBuilder.WORKLOAD_ID_LABEL, workload.getId().toString());
         podLabels.put("kai.scheduler/queue", queueName);
 
@@ -63,20 +77,21 @@ public class DeploymentSpecBuilder {
 
         List<Volume> podVolumes = new ArrayList<>();
         List<VolumeMount> containerMounts = new ArrayList<>();
-        if (mounts != null) {
-            for (int i = 0; i < mounts.size(); i++) {
-                VolumeMountSpec m = mounts.get(i);
-                String volName = "vol-" + i;
-                podVolumes.add(new VolumeBuilder()
-                        .withName(volName)
-                        .withPersistentVolumeClaim(new PersistentVolumeClaimVolumeSourceBuilder()
-                                .withClaimName(m.pvcName())
-                                .build())
-                        .build());
-                containerMounts.add(new VolumeMountBuilder()
-                        .withName(volName)
+        if (mounts != null && !mounts.isEmpty()) {
+            String teamPvcName = mounts.get(0).pvcName();
+            podVolumes.add(new VolumeBuilder()
+                    .withName(TEAM_DATA_VOLUME_NAME)
+                    .withPersistentVolumeClaim(new PersistentVolumeClaimVolumeSourceBuilder()
+                            .withClaimName(teamPvcName)
+                            .build())
+                    .build());
+            for (VolumeMountSpec m : mounts) {
+                VolumeMountBuilder mountBuilder = new VolumeMountBuilder()
+                        .withName(TEAM_DATA_VOLUME_NAME)
                         .withMountPath(m.mountPath())
-                        .build());
+                        .withSubPath(m.folderName());
+                if (m.readOnly()) mountBuilder.withReadOnly(true);
+                containerMounts.add(mountBuilder.build());
             }
         }
 
@@ -84,7 +99,7 @@ public class DeploymentSpecBuilder {
                 .withNewMetadata()
                     .withName(k8sName)
                     .withNamespace(namespace)
-                    .withLabels(selectorLabels)
+                    .withLabels(deploymentLabels)
                 .endMetadata()
                 .withNewSpec()
                     .withReplicas(replicas)

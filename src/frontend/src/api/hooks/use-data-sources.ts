@@ -9,7 +9,15 @@ const KEYS = {
 };
 
 export const useMyDataSources = () =>
-  useQuery({ queryKey: KEYS.mine, queryFn: dataSourceService.getMine });
+  useQuery({
+    queryKey: KEYS.mine,
+    queryFn: dataSourceService.getMine,
+    // Poll while any row is still being formatted; stop once all are 'formated'.
+    refetchInterval: (query) => {
+      const data = query.state.data as DataSourceDto[] | undefined;
+      return data?.some((s) => s.status === 'formating') ? 5_000 : false;
+    },
+  });
 
 export const useDataSource = (id: string) =>
   useQuery({

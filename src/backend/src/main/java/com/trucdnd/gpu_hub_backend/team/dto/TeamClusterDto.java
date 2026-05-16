@@ -9,6 +9,7 @@ public record TeamClusterDto(
         UUID clusterId,
         UUID policyId,
         String namespace,
+        String pvcSize,
         OffsetDateTime createdAt,
         OffsetDateTime updatedAt
 ) {

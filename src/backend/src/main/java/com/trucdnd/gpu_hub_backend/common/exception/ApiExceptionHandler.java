@@ -26,6 +26,11 @@ public class ApiExceptionHandler {
         return build(HttpStatus.BAD_REQUEST, exception.getMessage());
     }
 
+    @ExceptionHandler(IllegalStateException.class)
+    public ResponseEntity<Map<String, Object>> handleConflict(IllegalStateException exception) {
+        return build(HttpStatus.CONFLICT, exception.getMessage());
+    }
+
     @ExceptionHandler(KubernetesOperationException.class)
     public ResponseEntity<Map<String, Object>> handleKubernetes(KubernetesOperationException exception) {
         return build(HttpStatus.BAD_REQUEST, exception.getMessage());

@@ -9,7 +9,7 @@ public record CreateDataSourceRequest(
         @NotNull UUID clusterId,
         @NotNull UUID createdById,
         @NotNull UUID teamId,
-        @NotBlank String pvcName,
+        @NotBlank String name,
         @NotBlank String bucketUrl,
         @NotBlank String accessKey,
         @NotBlank String secretKey,

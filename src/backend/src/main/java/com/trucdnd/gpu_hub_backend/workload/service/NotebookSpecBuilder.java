@@ -8,6 +8,7 @@ import java.util.Map;
 
 import org.springframework.stereotype.Component;
 
+import com.trucdnd.gpu_hub_backend.kubernetes.util.K8sLabels;
 import com.trucdnd.gpu_hub_backend.workload.dto.VolumeMountSpec;
 import com.trucdnd.gpu_hub_backend.workload.entity.Workload;
 
@@ -19,16 +20,9 @@ public class NotebookSpecBuilder {
 
     private static final String API_VERSION = "kubeflow.org/v1";
     private static final String KIND = "Notebook";
-    public static final String WORKLOAD_ID_LABEL = "gpu-hub/workload-id";
+    public static final String WORKLOAD_ID_LABEL = K8sLabels.WORKLOAD_ID;
+    public static final String TEAM_DATA_VOLUME_NAME = "team-data";
 
-    /**
-     * Builds a Kubeflow Notebook CR.
-     *
-     * @param workload   persisted workload entity (resources / image)
-     * @param k8sName    auto-generated K8s resource name (e.g. "alice-notebook-ab3xy")
-     * @param namespace  target K8s namespace (from TeamCluster)
-     * @param mounts     PVC mounts to inject as podSpec.volumes / container.volumeMounts
-     */
     public GenericKubernetesResource build(Workload workload, String k8sName, String namespace,
             String queueName, List<VolumeMountSpec> mounts) {
         Map<String, Object> resources = new HashMap<>();
@@ -56,21 +50,33 @@ public class NotebookSpecBuilder {
 
         List<Map<String, Object>> podVolumes = new ArrayList<>();
         List<Map<String, Object>> containerMounts = new ArrayList<>();
-        if (mounts != null) {
-            for (int i = 0; i < mounts.size(); i++) {
-                VolumeMountSpec m = mounts.get(i);
-                String volName = "vol-" + i;
-                podVolumes.add(Map.of(
-                        "name", volName,
-                        "persistentVolumeClaim", Map.of("claimName", m.pvcName())));
-                containerMounts.add(Map.of("name", volName, "mountPath", m.mountPath()));
+        if (mounts != null && !mounts.isEmpty()) {
+            String teamPvcName = mounts.get(0).pvcName();
+            podVolumes.add(Map.of(
+                    "name", TEAM_DATA_VOLUME_NAME,
+                    "persistentVolumeClaim", Map.of("claimName", teamPvcName)));
+            for (VolumeMountSpec m : mounts) {
+                Map<String, Object> mount = new LinkedHashMap<>();
+                mount.put("name", TEAM_DATA_VOLUME_NAME);
+                mount.put("mountPath", m.mountPath());
+                mount.put("subPath", m.folderName());
+                if (m.readOnly()) mount.put("readOnly", true);
+                containerMounts.add(mount);
             }
         }
         if (!containerMounts.isEmpty()) container.put("volumeMounts", containerMounts);
 
-        Map<String, String> crLabels = Map.of(WORKLOAD_ID_LABEL, workload.getId().toString());
+        Map<String, String> baseLabels = K8sLabels.standard(
+                K8sLabels.OWNER_WORKLOAD,
+                workload.getProject().getTeam().getName(),
+                workload.getCluster().getName(),
+                workload.getSubmittedBy().getUsername());
+        baseLabels.put(K8sLabels.PROJECT, K8sLabels.sanitize(workload.getProject().getName()));
 
-        Map<String, String> podLabels = new LinkedHashMap<>();
+        Map<String, String> crLabels = new LinkedHashMap<>(baseLabels);
+        crLabels.put(WORKLOAD_ID_LABEL, workload.getId().toString());
+
+        Map<String, String> podLabels = new LinkedHashMap<>(baseLabels);
         podLabels.put(WORKLOAD_ID_LABEL, workload.getId().toString());
         podLabels.put("kai.scheduler/queue", queueName);
 

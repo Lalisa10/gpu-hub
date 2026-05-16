@@ -459,7 +459,7 @@ validatingWebhook:
 storageClasses:
 - name: "juicefs-sc"
   # Set to true to actually create this StorageClass
-  enabled: false
+  enabled: true
   # Set existingSecret to indicate whether to use an existing secret. If it is empty, a corresponding secret will be created according to the plain text configuration.
   existingSecret: ""
   # Either Retain or Delete, ref: https://juicefs.com/docs/csi/guide/resource-optimization#reclaim-policy
@@ -472,19 +472,19 @@ storageClasses:
 
   backend:
     # The JuiceFS file system name
-    name: ""
+    name: "juicefs-fs"
     # Connection URL for metadata engine (e.g. Redis), for community edition use only, ref: https://juicefs.com/docs/community/databases_for_metadata
-    metaurl: ""
+    metaurl: "postgres://postgres:1234@172.17.0.1:5432/juicefs"
     # Object storage type, such as s3, gs, oss, for community edition use only, ref: https://juicefs.com/docs/community/how_to_setup_object_storage
-    storage: ""
+    storage: "minio"
     # Bucket URL, for community edition use only, ref: https://juicefs.com/docs/community/how_to_setup_object_storage
-    bucket: ""
+    bucket: "http://172.17.0.1:9000/juicefs"
     # Token for JuiceFS Enterprise Edition token, ref: https://juicefs.com/docs/cloud/acl
     token: ""
     # Access key for object storage
-    accessKey: ""
+    accessKey: "minioadmin"
     # Secret key for object storage
-    secretKey: ""
+    secretKey: "minioadmin"
     # Environment variables for the JuiceFS Client
     # Example: {"a": "b"}
     # Ref: https://juicefs.com/docs/csi/guide/pv#volume-credentials
@@ -492,11 +492,11 @@ storageClasses:
     # Extra files for the mount pod, ref: https://juicefs.com/docs/csi/guide/pv/#mount-pod-extra-files
     configs: ""
     # The number of days which files are kept in the trash, for community edition use only, ref: https://juicefs.com/docs/community/security/trash
-    trashDays: ""
+    trashDays: "3"
     # Options passed to the "juicefs format" or "juicefs auth" command, depending on which edition you're using
     # Example: block-size=4096,capacity=10
     # Ref: https://juicefs.com/docs/community/command_reference#format and https://juicefs.com/docs/cloud/reference/commands_reference#auth
-    formatOptions: ""
+    formatOptions:
 
   # Options for the "juicefs mount" command
   # Example:
@@ -505,7 +505,8 @@ storageClasses:
   # - cache-dir=/var/foo
   # Ref: https://juicefs.com/docs/community/command_reference#mount and https://juicefs.com/docs/cloud/reference/commands_reference#mount
   mountOptions:
-
+    - cache-size=8192
+    - cache-dir=/var/lib/juicefs/cache
   # Customize PV directory format, ref: https://juicefs.com/docs/csi/guide/pv#using-path-pattern
   # If enabled, controller.provisioner must be set to true
   # Example: "${.PVC.namespace}-${.PVC.name}"

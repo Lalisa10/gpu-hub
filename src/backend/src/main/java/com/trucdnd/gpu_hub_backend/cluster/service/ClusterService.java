@@ -19,10 +19,16 @@ import com.trucdnd.gpu_hub_backend.object_storage.service.ObjectStorageService;
 import com.trucdnd.gpu_hub_backend.workload.entity.Workload;
 import com.trucdnd.gpu_hub_backend.workload.repository.WorkloadRepository;
 
+import io.fabric8.kubernetes.api.model.Container;
 import io.fabric8.kubernetes.api.model.Node;
+import io.fabric8.kubernetes.api.model.Pod;
 import io.fabric8.kubernetes.api.model.Quantity;
+import io.fabric8.kubernetes.api.model.ResourceRequirements;
 import jakarta.persistence.EntityNotFoundException;
 import lombok.RequiredArgsConstructor;
+
+import java.util.HashMap;
+import java.util.Map;
 
 @Service
 @RequiredArgsConstructor
@@ -74,7 +80,6 @@ public class ClusterService {
         cluster.setName(request.name());
         cluster.setDescription(request.description());
         cluster.setKubeconfigRef(request.kubeconfigRef());
-        cluster.setJuicefsMetaurl(request.juicefsMetaurl());
         Cluster saved = clusterRepository.save(cluster);
         return ClusterMapper.toDto(saved);
     }
@@ -97,10 +102,6 @@ public class ClusterService {
 
         if (request.status().isPresent()) {
             cluster.setStatus(request.status().orElse(null));
-        }
-
-        if (request.juicefsMetaurl().isPresent()) {
-            cluster.setJuicefsMetaurl(request.juicefsMetaurl().orElse(null));
         }
 
         return ClusterMapper.toDto(clusterRepository.save(cluster));
@@ -132,10 +133,37 @@ public class ClusterService {
                 .orElseThrow(() -> new EntityNotFoundException("Cluster not found: " + id));
 
         List<Node> k8sNodes = builtinResourceService.listNodes(cluster);
+        List<Pod> allPods = builtinResourceService.listAllPods(cluster);
+
+        // Aggregate pod requests/limits by node (only schedulable pods)
+        Map<String, NodeUsage> usageByNode = new HashMap<>();
+        for (Pod pod : allPods) {
+            String nodeName = pod.getSpec() != null ? pod.getSpec().getNodeName() : null;
+            if (nodeName == null) continue;
+            String phase = pod.getStatus() != null ? pod.getStatus().getPhase() : null;
+            if ("Succeeded".equals(phase) || "Failed".equals(phase)) continue;
+
+            NodeUsage u = usageByNode.computeIfAbsent(nodeName, k -> new NodeUsage());
+            if (pod.getSpec().getContainers() == null) continue;
+            for (Container c : pod.getSpec().getContainers()) {
+                ResourceRequirements rr = c.getResources();
+                if (rr == null) continue;
+                Map<String, Quantity> req = rr.getRequests();
+                Map<String, Quantity> lim = rr.getLimits();
+                if (req != null) {
+                    u.cpuRequestMillis += parseCpuToMillis(amt(req.get("cpu")));
+                    u.ramRequestBytes  += parseMemToBytes(amt(req.get("memory")));
+                    u.gpuAllocated     += parseIntOr0(amt(req.get("nvidia.com/gpu")));
+                }
+                if (lim != null) {
+                    u.cpuLimitMillis += parseCpuToMillis(amt(lim.get("cpu")));
+                    u.ramLimitBytes  += parseMemToBytes(amt(lim.get("memory")));
+                }
+            }
+        }
 
         List<NodeInfoDto> nodes = k8sNodes.stream().map(n -> {
-            boolean ready = n.getStatus().getConditions().stream()
-                    .anyMatch(c -> "Ready".equals(c.getType()) && "True".equals(c.getStatus()));
+            String status = computeNodeStatus(n);
 
             long cpuCap = parseCpuToMillis(n.getStatus().getCapacity()
                     .getOrDefault("cpu", new Quantity("0")).getAmount());
@@ -155,33 +183,32 @@ public class ClusterService {
             String gpuModel = n.getMetadata().getLabels() != null
                     ? n.getMetadata().getLabels().get("nvidia.com/gpu.product") : null;
 
-            return new NodeInfoDto(n.getMetadata().getName(), ready,
-                    cpuCap, cpuAlloc, ramCap, ramAlloc, gpuTotal, gpuModel);
+            NodeUsage u = usageByNode.getOrDefault(n.getMetadata().getName(), new NodeUsage());
+
+            return new NodeInfoDto(
+                    n.getMetadata().getName(),
+                    status,
+                    cpuCap, cpuAlloc, u.cpuRequestMillis, u.cpuLimitMillis,
+                    ramCap, ramAlloc, u.ramRequestBytes, u.ramLimitBytes,
+                    gpuTotal, Math.min(u.gpuAllocated, gpuTotal),
+                    gpuModel);
         }).toList();
 
-        List<Workload> running = workloadRepository
-                .findByClusterIdAndStatus(id, com.trucdnd.gpu_hub_backend.common.constants.Workload.Status.RUNNING);
-        int gpusInUse = running.stream()
-                .mapToInt(w -> w.getRequestedGpu() != null ? w.getRequestedGpu().intValue() : 0).sum();
         int gpusTotal = nodes.stream().mapToInt(NodeInfoDto::gpuTotal).sum();
+        int gpusInUse = nodes.stream().mapToInt(NodeInfoDto::gpuAllocated).sum();
 
         List<GpuInfoDto> gpus = new ArrayList<>();
         int globalIdx = 0;
-        for (Node n : k8sNodes) {
-            int nodeGpus = 0;
-            try {
-                nodeGpus = Integer.parseInt(n.getStatus().getCapacity()
-                        .getOrDefault("nvidia.com/gpu", new Quantity("0")).getAmount());
-            } catch (NumberFormatException ignored) {}
-            String model = n.getMetadata().getLabels() != null
-                    ? n.getMetadata().getLabels().get("nvidia.com/gpu.product") : null;
-            for (int i = 0; i < nodeGpus; i++) {
-                gpus.add(new GpuInfoDto(globalIdx, n.getMetadata().getName(), model,
-                        globalIdx < gpusInUse ? "In Use" : "Idle"));
+        for (NodeInfoDto nDto : nodes) {
+            for (int i = 0; i < nDto.gpuTotal(); i++) {
+                gpus.add(new GpuInfoDto(globalIdx, nDto.name(), nDto.gpuModel(),
+                        i < nDto.gpuAllocated() ? "In Use" : "Idle"));
                 globalIdx++;
             }
         }
 
+        List<Workload> running = workloadRepository
+                .findByClusterIdAndStatus(id, com.trucdnd.gpu_hub_backend.common.constants.Workload.Status.RUNNING);
         List<ActiveWorkloadSummaryDto> activeWorkloads = running.stream()
                 .map(w -> new ActiveWorkloadSummaryDto(w.getId(), w.getName(),
                         w.getWorkloadType().dbValue, w.getRequestedGpu(),
@@ -190,6 +217,39 @@ public class ClusterService {
 
         return new ClusterDetailsDto(cluster.getId(), cluster.getName(),
                 gpusTotal, gpusInUse, nodes, gpus, activeWorkloads);
+    }
+
+    private static String computeNodeStatus(Node n) {
+        if (n.getStatus() == null || n.getStatus().getConditions() == null) return "NotReady";
+        boolean ready = false;
+        boolean pressure = false;
+        for (var c : n.getStatus().getConditions()) {
+            String type = c.getType();
+            boolean active = "True".equals(c.getStatus());
+            if ("Ready".equals(type) && active) ready = true;
+            if (active && (type.endsWith("Pressure") || "NetworkUnavailable".equals(type))) pressure = true;
+        }
+        if (!ready) return "NotReady";
+        if (pressure) return "Pressure";
+        return "Ready";
+    }
+
+    private static String amt(Quantity q) {
+        return q == null ? null : q.getAmount() + (q.getFormat() == null ? "" : q.getFormat());
+    }
+
+    private static int parseIntOr0(String s) {
+        if (s == null || s.isBlank()) return 0;
+        try { return Integer.parseInt(s.trim()); }
+        catch (NumberFormatException e) { return 0; }
+    }
+
+    private static final class NodeUsage {
+        long cpuRequestMillis;
+        long cpuLimitMillis;
+        long ramRequestBytes;
+        long ramLimitBytes;
+        int gpuAllocated;
     }
 
     private long parseCpuToMillis(String q) {

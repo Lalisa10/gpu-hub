@@ -42,19 +42,19 @@ public class PolicyService {
 
     public PolicyDto create(CreatePolicyRequest request) {
         Policy policy = new Policy();
-        apply(policy, request.clusterId(), request.name(), request.description(), request.priority(),
+        apply(policy, request.clusterId(), request.name(), request.description(),
                 request.gpuQuota(), request.cpuQuota(), request.memoryQuota(), request.gpuLimit(), request.cpuLimit(),
                 request.memoryLimit(), request.gpuOverQuotaWeight(), request.cpuOverQuotaWeight(),
-                request.memoryOverQuotaWeight(), request.nodeAffinity(), request.gpuTypes());
+                request.memoryOverQuotaWeight(), request.extra());
         return toDto(policyRepository.save(policy));
     }
 
     public PolicyDto update(UUID id, UpdatePolicyRequest request) {
         Policy policy = getPolicy(id);
-        apply(policy, request.clusterId(), request.name(), request.description(), request.priority(),
+        apply(policy, request.clusterId(), request.name(), request.description(),
                 request.gpuQuota(), request.cpuQuota(), request.memoryQuota(), request.gpuLimit(), request.cpuLimit(),
                 request.memoryLimit(), request.gpuOverQuotaWeight(), request.cpuOverQuotaWeight(),
-                request.memoryOverQuotaWeight(), request.nodeAffinity(), request.gpuTypes());
+                request.memoryOverQuotaWeight(), request.extra());
         PolicyDto dto = toDto(policyRepository.save(policy));
         syncQueues(policy);
         return dto;
@@ -73,9 +73,6 @@ public class PolicyService {
         }
         if (request.description().isPresent()) {
             policy.setDescription(request.description().orElse(null));
-        }
-        if (request.priority().isPresent()) {
-            policy.setPriority(request.priority().orElse(null));
         }
         if (request.gpuQuota().isPresent()) {
             policy.setGpuQuota(request.gpuQuota().orElse(null));
@@ -104,11 +101,8 @@ public class PolicyService {
         if (request.memoryOverQuotaWeight().isPresent()) {
             policy.setMemoryOverQuotaWeight(request.memoryOverQuotaWeight().orElse(null));
         }
-        if (request.nodeAffinity().isPresent()) {
-            policy.setNodeAffinity(request.nodeAffinity().orElse(null));
-        }
-        if (request.gpuTypes().isPresent()) {
-            policy.setGpuTypes(request.gpuTypes().orElse(null));
+        if (request.extra().isPresent()) {
+            policy.setExtra(request.extra().orElse(null));
         }
 
         PolicyDto dto = toDto(policyRepository.save(policy));
@@ -127,7 +121,6 @@ public class PolicyService {
             UUID clusterId,
             String name,
             String description,
-            Integer priority,
             java.math.BigDecimal gpuQuota,
             java.math.BigDecimal cpuQuota,
             Long memoryQuota,
@@ -137,15 +130,13 @@ public class PolicyService {
             Integer gpuOverQuotaWeight,
             Integer cpuOverQuotaWeight,
             Integer memoryOverQuotaWeight,
-            Map<String, Object> nodeAffinity,
-            String[] gpuTypes) {
+            Map<String, Object> extra) {
         Cluster cluster = clusterRepository.findById(clusterId)
                 .orElseThrow(() -> new EntityNotFoundException("Cluster not found with id: " + clusterId));
 
         policy.setCluster(cluster);
         policy.setName(name);
         policy.setDescription(description);
-        policy.setPriority(priority);
         policy.setGpuQuota(gpuQuota);
         policy.setCpuQuota(cpuQuota);
         policy.setMemoryQuota(memoryQuota);
@@ -155,8 +146,7 @@ public class PolicyService {
         policy.setGpuOverQuotaWeight(gpuOverQuotaWeight);
         policy.setCpuOverQuotaWeight(cpuOverQuotaWeight);
         policy.setMemoryOverQuotaWeight(memoryOverQuotaWeight);
-        policy.setNodeAffinity(nodeAffinity);
-        policy.setGpuTypes(gpuTypes);
+        policy.setExtra(extra);
     }
 
     private void syncQueues(Policy policy) {
@@ -196,7 +186,6 @@ public class PolicyService {
                 policy.getCluster().getId(),
                 policy.getName(),
                 policy.getDescription(),
-                policy.getPriority(),
                 policy.getGpuQuota(),
                 policy.getCpuQuota(),
                 policy.getMemoryQuota(),
@@ -206,8 +195,7 @@ public class PolicyService {
                 policy.getGpuOverQuotaWeight(),
                 policy.getCpuOverQuotaWeight(),
                 policy.getMemoryOverQuotaWeight(),
-                policy.getNodeAffinity(),
-                policy.getGpuTypes(),
+                policy.getExtra(),
                 policy.getCreatedAt(),
                 policy.getUpdatedAt()
         );

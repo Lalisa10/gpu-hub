@@ -15,7 +15,6 @@ import MyTeamsPage from '@/pages/my-teams';
 import SubmitWorkloadPage from '@/pages/workloads/submit';
 import WorkloadListPage from '@/pages/workloads/list';
 import DataSourcesListPage from '@/pages/data-sources/list';
-import DataVolumesListPage from '@/pages/data-volumes/list';
 
 const queryClient = new QueryClient({
   defaultOptions: {
@@ -51,7 +50,6 @@ export default function App() {
               <Route path="/workloads" element={<WorkloadListPage />} />
               <Route path="/workloads/new" element={<SubmitWorkloadPage />} />
               <Route path="/data-sources" element={<DataSourcesListPage />} />
-              <Route path="/data-volumes" element={<DataVolumesListPage />} />
               <Route path="*" element={<Navigate to="/workloads" replace />} />
             </Route>
           </Routes>

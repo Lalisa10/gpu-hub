@@ -3,7 +3,6 @@ package com.trucdnd.gpu_hub_backend.common.security;
 import com.trucdnd.gpu_hub_backend.common.constants.Team.TeamRole;
 import com.trucdnd.gpu_hub_backend.common.constants.User.GlobalRole;
 import com.trucdnd.gpu_hub_backend.data_source.repository.DataSourceRepository;
-import com.trucdnd.gpu_hub_backend.data_volume.repository.DataVolumeRepository;
 import com.trucdnd.gpu_hub_backend.project.repository.ProjectRepository;
 import com.trucdnd.gpu_hub_backend.team.repository.TeamMemberRepository;
 import com.trucdnd.gpu_hub_backend.workload.entity.Workload;
@@ -21,18 +20,15 @@ public class RbacService {
     private final TeamMemberRepository teamMemberRepository;
     private final ProjectRepository projectRepository;
     private final WorkloadRepository workloadRepository;
-    private final DataVolumeRepository dataVolumeRepository;
     private final DataSourceRepository dataSourceRepository;
 
     public RbacService(TeamMemberRepository teamMemberRepository,
                        ProjectRepository projectRepository,
                        WorkloadRepository workloadRepository,
-                       DataVolumeRepository dataVolumeRepository,
                        DataSourceRepository dataSourceRepository) {
         this.teamMemberRepository = teamMemberRepository;
         this.projectRepository = projectRepository;
         this.workloadRepository = workloadRepository;
-        this.dataVolumeRepository = dataVolumeRepository;
         this.dataSourceRepository = dataSourceRepository;
     }
 
@@ -104,15 +100,6 @@ public class RbacService {
 
     public boolean canCancelWorkload(UUID workloadId) {
         return canAccessWorkload(workloadId);
-    }
-
-    public boolean canManageDataVolume(UUID volumeId) {
-        if (isAdmin()) {
-            return true;
-        }
-        UUID teamId = dataVolumeRepository.findTeamIdByVolumeId(volumeId)
-                .orElseThrow(() -> new EntityNotFoundException("DataVolume not found: " + volumeId));
-        return canManageTeam(teamId);
     }
 
     public boolean canManageDataSource(UUID sourceId) {

@@ -18,9 +18,16 @@ FROM nginx:1.27-alpine
 # NGINX_ENVSUBST_FILTER_VARS limits substitution to our vars so nginx's own
 # $host / $remote_addr / etc. are left alone.
 COPY default.conf.template /etc/nginx/templates/default.conf.template
+
+# Populates NGINX_RESOLVER from /etc/resolv.conf at container start so the
+# config template can pin nginx's resolver to the cluster DNS service. The
+# nginx entrypoint sources *.envsh files (when executable) before envsubst.
+COPY 10-extract-resolver.envsh /docker-entrypoint.d/10-extract-resolver.envsh
+RUN chmod +x /docker-entrypoint.d/10-extract-resolver.envsh
+
 ENV BACKEND_HOST=backend \
     BACKEND_PORT=8080 \
-    NGINX_ENVSUBST_FILTER_VARS="BACKEND_HOST BACKEND_PORT"
+    NGINX_ENVSUBST_FILTER_VARS="BACKEND_HOST BACKEND_PORT NGINX_RESOLVER"
 
 COPY --from=build /app/dist /usr/share/nginx/html
 

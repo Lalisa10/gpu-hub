@@ -1,7 +1,7 @@
 package com.trucdnd.gpu_hub_backend.workload.dto;
 
 import com.trucdnd.gpu_hub_backend.common.constants.Workload.*;
-import com.trucdnd.gpu_hub_backend.workload_volume.dto.AttachVolumeRequest;
+import com.trucdnd.gpu_hub_backend.workload_source.dto.AttachSourceRequest;
 
 import jakarta.validation.Valid;
 import jakarta.validation.constraints.NotBlank;
@@ -22,6 +22,6 @@ public record CreateWorkloadRequest(
         @NotNull BigDecimal requestedCpu,
         @NotNull Long requestedMemory,
         String extra,
-        @Valid List<AttachVolumeRequest> volumes
+        @Valid List<AttachSourceRequest> sources
 ) {
 }
