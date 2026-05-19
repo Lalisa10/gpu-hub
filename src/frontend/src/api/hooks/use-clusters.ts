@@ -18,7 +18,8 @@ export const useCluster = (id: string) =>
 export const useCreateCluster = () => {
   const qc = useQueryClient();
   return useMutation({
-    mutationFn: (data: JoinClusterRequest) => clusterService.create(data),
+    mutationFn: ({ meta, file }: { meta: JoinClusterRequest; file: File }) =>
+      clusterService.create(meta, file),
     onSuccess: () => qc.invalidateQueries({ queryKey: KEYS.all }),
   });
 };
@@ -64,6 +65,15 @@ export const useClusterDetails = (id: string | null, enabled = true) =>
     queryFn: () => clusterService.getDetails(id!),
     enabled: enabled && !!id,
     staleTime: 60_000,
+  });
+
+export const useClusterNodes = (id: string | null) =>
+  useQuery({
+    queryKey: ['clusters', id ?? '', 'nodes'],
+    queryFn: () => clusterService.getNodes(id!),
+    enabled: !!id,
+    staleTime: 60_000,
+    retry: false,
   });
 
 export function useClusterDetailsStream(id: string | null, enabled: boolean) {

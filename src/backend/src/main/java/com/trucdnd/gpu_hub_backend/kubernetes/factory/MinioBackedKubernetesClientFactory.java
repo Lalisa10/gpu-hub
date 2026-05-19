@@ -42,7 +42,20 @@ public class MinioBackedKubernetesClientFactory implements KubernetesClientFacto
                 kubeconfigRef
         );
 
+        return buildClient(kubeconfig);
+    }
+
+    @Override
+    public KubernetesClient createClientFromKubeconfig(String kubeconfig) {
+        return buildClient(kubeconfig);
+    }
+
+    /** Build a Fabric8 client with bounded connection/request timeouts so a
+     *  misconfigured or unreachable cluster fails fast instead of hanging. */
+    private KubernetesClient buildClient(String kubeconfig) {
         Config config = Config.fromKubeconfig(kubeconfig);
+        config.setConnectionTimeout(kubernetesProperties.getConnectionTimeoutMs());
+        config.setRequestTimeout(kubernetesProperties.getRequestTimeoutMs());
         return new KubernetesClientBuilder().withConfig(config).build();
     }
 }

@@ -13,6 +13,7 @@ import org.hibernate.annotations.JdbcTypeCode;
 import org.hibernate.type.SqlTypes;
 
 import java.math.BigDecimal;
+import java.util.List;
 import java.util.Map;
 
 
@@ -65,4 +66,13 @@ public class Policy extends MutableEntity {
     @Column(name = "extra", columnDefinition = "jsonb")
     @JdbcTypeCode(SqlTypes.JSON)
     private Map<String, Object> extra;
+
+    /** Node pool stored inside {@code extra} as {@code {"nodePool": [...]}}. */
+    public List<String> nodePool() {
+        Object v = extra == null ? null : extra.get("nodePool");
+        if (v instanceof List<?> l) {
+            return l.stream().filter(String.class::isInstance).map(String.class::cast).toList();
+        }
+        return List.of();
+    }
 }

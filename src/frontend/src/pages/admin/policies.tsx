@@ -19,11 +19,17 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select';
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuCheckboxItem,
+  DropdownMenuTrigger,
+} from '@/components/ui/dropdown-menu';
 import { usePolicies, useCreatePolicy, useDeletePolicy } from '@/api/hooks/use-policies';
-import { useClusters } from '@/api/hooks/use-clusters';
+import { useClusters, useClusterNodes } from '@/api/hooks/use-clusters';
 import type { PolicyDto, CreatePolicyRequest } from '@/api/types';
 import type { Column } from '@/components/shared/data-table';
-import { Plus, Trash2, AlertCircle, HelpCircle } from 'lucide-react';
+import { Plus, Trash2, AlertCircle, HelpCircle, ChevronDown } from 'lucide-react';
 
 // All numeric fields are kept as raw strings so the user can type naturally
 // (no coercion on every keystroke). They are parsed to numbers at submit time.
@@ -40,7 +46,7 @@ interface FormState {
   gpuOverQuotaWeight: string;
   cpuOverQuotaWeight: string;
   memoryOverQuotaWeight: string;
-  extra?: string;
+  nodePool: string[];
 }
 
 const NUMERIC_FIELDS = [
@@ -62,7 +68,7 @@ const emptyForm: FormState = {
   gpuOverQuotaWeight: '',
   cpuOverQuotaWeight: '',
   memoryOverQuotaWeight: '',
-  extra: '',
+  nodePool: [],
 };
 
 interface ValidationErrors {
@@ -97,18 +103,6 @@ const validateForm = (form: FormState): ValidationErrors => {
       errors[field] = 'Must be a number';
     } else if (n < -1) {
       errors[field] = 'Must be a positive number or 0, -1';
-    }
-  }
-
-  // Validate extra JSON if provided
-  if (form.extra?.trim()) {
-    try {
-      const parsed = JSON.parse(form.extra);
-      if (typeof parsed !== 'object' || parsed === null || Array.isArray(parsed)) {
-        errors.extra = 'Must be a valid JSON object';
-      }
-    } catch {
-      errors.extra = 'Invalid JSON format';
     }
   }
 
@@ -161,6 +155,31 @@ export default function PoliciesPage() {
 
   const clusterName = (id: string) => clusters.find((c) => c.id === id)?.name ?? id.slice(0, 8);
 
+  // Node names of the cluster chosen in the form — populates the Node Pool multi-select.
+  const { data: clusterNodes = [], isLoading: nodesLoading } = useClusterNodes(
+    form.clusterId || null,
+  );
+
+  const handleClusterChange = (v: string) => {
+    // Node pool belongs to a cluster — reset it when the cluster changes.
+    setForm((f) => ({ ...f, clusterId: v, nodePool: [] }));
+    if (errors.clusterId) {
+      setErrors((e) => {
+        const next = { ...e };
+        delete next.clusterId;
+        return next;
+      });
+    }
+  };
+
+  const toggleNode = (name: string) =>
+    setForm((f) => ({
+      ...f,
+      nodePool: f.nodePool.includes(name)
+        ? f.nodePool.filter((n) => n !== name)
+        : [...f.nodePool, name],
+    }));
+
   const columns: Column<PolicyDto>[] = [
     { header: 'Name', accessor: 'name' },
     { header: 'Cluster', accessor: (p) => clusterName(p.clusterId) },
@@ -206,7 +225,7 @@ export default function PoliciesPage() {
       gpuOverQuotaWeight: parseNum(form.gpuOverQuotaWeight),
       cpuOverQuotaWeight: parseNum(form.cpuOverQuotaWeight),
       memoryOverQuotaWeight: parseNum(form.memoryOverQuotaWeight),
-      extra: form.extra ? JSON.parse(form.extra) : undefined,
+      nodePool: form.nodePool,
     };
 
     await createPolicy.mutateAsync(submitData);
@@ -274,7 +293,7 @@ export default function PoliciesPage() {
                   error={errors.clusterId}
                   helperText="Select the cluster this policy applies to"
                 >
-                  <Select value={form.clusterId} onValueChange={(v) => v && updateField('clusterId', v)}>
+                  <Select value={form.clusterId} onValueChange={(v) => v && handleClusterChange(v)}>
                     <SelectTrigger className={`w-full ${errors.clusterId ? 'border-destructive' : ''}`}>
                       <SelectValue placeholder="Select cluster">
                         {form.clusterId ? clusterName(form.clusterId) : null}
@@ -290,6 +309,53 @@ export default function PoliciesPage() {
                   </Select>
                 </FieldGroup>
               </div>
+
+              <FieldGroup
+                label="Node Pool"
+                helperText="Restrict scheduling to these nodes. Leave empty to allow all nodes. A workload runs on the intersection of its project policy and team policy node pools."
+              >
+                <DropdownMenu>
+                  <DropdownMenuTrigger
+                    disabled={!form.clusterId}
+                    className="flex h-9 w-full items-center justify-between rounded-lg border border-input bg-transparent px-3 text-sm outline-none focus-visible:border-ring focus-visible:ring-3 focus-visible:ring-ring/50 disabled:cursor-not-allowed disabled:opacity-50"
+                  >
+                    <span className={form.nodePool.length === 0 ? 'text-muted-foreground' : ''}>
+                      {!form.clusterId
+                        ? 'Select a cluster first'
+                        : form.nodePool.length === 0
+                          ? 'All nodes (no restriction)'
+                          : `${form.nodePool.length} node${form.nodePool.length > 1 ? 's' : ''} selected`}
+                    </span>
+                    <ChevronDown className="h-4 w-4 text-muted-foreground" />
+                  </DropdownMenuTrigger>
+                  <DropdownMenuContent className="max-h-72 w-(--anchor-width) overflow-y-auto">
+                    {nodesLoading ? (
+                      <div className="px-2 py-1.5 text-sm text-muted-foreground">Loading nodes…</div>
+                    ) : clusterNodes.length === 0 ? (
+                      <div className="px-2 py-1.5 text-sm text-muted-foreground">No nodes found.</div>
+                    ) : (
+                      clusterNodes.map((name) => (
+                        <DropdownMenuCheckboxItem
+                          key={name}
+                          checked={form.nodePool.includes(name)}
+                          onCheckedChange={() => toggleNode(name)}
+                        >
+                          {name}
+                        </DropdownMenuCheckboxItem>
+                      ))
+                    )}
+                  </DropdownMenuContent>
+                </DropdownMenu>
+              </FieldGroup>
+
+              <FieldGroup label="Description" helperText="Optional details about this policy">
+                <Textarea
+                  placeholder="Describe the purpose and constraints of this policy..."
+                  value={form.description ?? ''}
+                  onChange={(e) => updateField('description', e.target.value)}
+                  rows={3}
+                />
+              </FieldGroup>
             </div>
 
             {/* Resource Quotas Section */}
@@ -458,36 +524,6 @@ export default function PoliciesPage() {
               </div>
             </div>
 
-            {/* Advanced Settings Section */}
-            <div className="space-y-4">
-              <h3 className="text-sm font-semibold text-foreground">Advanced Settings</h3>
-
-              <FieldGroup
-                label="Extra (JSON)"
-                error={errors.extra}
-                helperText="Free-form JSON for scheduler hints, node affinity, or other extensions. Leave empty if not needed."
-              >
-                <Textarea
-                  placeholder={'{\n  "nodeAffinity": {\n    "requiredDuringSchedulingIgnoredDuringExecution": {\n      "nodeSelectorTerms": []\n    }\n  }\n}'}
-                  value={form.extra ?? ''}
-                  onChange={(e) => updateField('extra', e.target.value)}
-                  className={`font-mono text-xs ${errors.extra ? 'border-destructive' : ''}`}
-                  rows={4}
-                />
-              </FieldGroup>
-
-              <FieldGroup
-                label="Description"
-                helperText="Optional details about this policy"
-              >
-                <Textarea
-                  placeholder="Describe the purpose and constraints of this policy..."
-                  value={form.description ?? ''}
-                  onChange={(e) => updateField('description', e.target.value)}
-                  rows={3}
-                />
-              </FieldGroup>
-            </div>
           </div>
 
           <DialogFooter className="flex justify-between border-t pt-4">

@@ -6,7 +6,13 @@ const URL = '/clusters';
 export const clusterService = {
   getAll: () => client.get<ClusterDto[]>(URL).then((r) => r.data),
   getById: (id: string) => client.get<ClusterDto>(`${URL}/${id}`).then((r) => r.data),
-  create: (data: JoinClusterRequest) => client.post<ClusterDto>(URL, data).then((r) => r.data),
+  create: (meta: JoinClusterRequest, file: File) => {
+    const form = new FormData();
+    form.append('data', new Blob([JSON.stringify(meta)], { type: 'application/json' }));
+    form.append('file', file);
+    // Axios sets multipart/form-data with boundary automatically.
+    return client.post<ClusterDto>(URL, form).then((r) => r.data);
+  },
   update: (id: string, data: JoinClusterRequest) =>
     client.put<ClusterDto>(`${URL}/${id}`, data).then((r) => r.data),
   patch: (id: string, data: PatchClusterRequest) =>
@@ -20,4 +26,6 @@ export const clusterService = {
   },
   getDetails: (id: string) =>
     client.get<ClusterDetailsDto>(`${URL}/${id}/details`).then((r) => r.data),
+  getNodes: (id: string) =>
+    client.get<string[]>(`${URL}/${id}/nodes`).then((r) => r.data),
 };

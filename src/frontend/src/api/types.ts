@@ -150,7 +150,7 @@ export interface PolicyDto {
   gpuOverQuotaWeight: number | null;
   cpuOverQuotaWeight: number | null;
   memoryOverQuotaWeight: number | null;
-  extra: string | null;
+  nodePool: string[];
   createdAt: string;
   updatedAt: string;
 }
@@ -168,7 +168,7 @@ export interface CreatePolicyRequest {
   gpuOverQuotaWeight?: number;
   cpuOverQuotaWeight?: number;
   memoryOverQuotaWeight?: number;
-  extra?: string;
+  nodePool: string[];
 }
 
 export interface UpdatePolicyRequest extends CreatePolicyRequest {}

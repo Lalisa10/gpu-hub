@@ -4,7 +4,7 @@ import jakarta.validation.constraints.NotBlank;
 import lombok.Builder;
 
 import java.math.BigDecimal;
-import java.util.Map;
+import java.util.List;
 import java.util.Optional;
 import java.util.UUID;
 
@@ -22,6 +22,6 @@ public record PatchPolicyRequest(
         Optional<Integer> gpuOverQuotaWeight,
         Optional<Integer> cpuOverQuotaWeight,
         Optional<Integer> memoryOverQuotaWeight,
-        Optional<Map<String, Object>> extra
+        Optional<List<String>> nodePool
 ) {
 }

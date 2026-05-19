@@ -45,7 +45,7 @@ public class PolicyService {
         apply(policy, request.clusterId(), request.name(), request.description(),
                 request.gpuQuota(), request.cpuQuota(), request.memoryQuota(), request.gpuLimit(), request.cpuLimit(),
                 request.memoryLimit(), request.gpuOverQuotaWeight(), request.cpuOverQuotaWeight(),
-                request.memoryOverQuotaWeight(), request.extra());
+                request.memoryOverQuotaWeight(), request.nodePool());
         return toDto(policyRepository.save(policy));
     }
 
@@ -54,7 +54,7 @@ public class PolicyService {
         apply(policy, request.clusterId(), request.name(), request.description(),
                 request.gpuQuota(), request.cpuQuota(), request.memoryQuota(), request.gpuLimit(), request.cpuLimit(),
                 request.memoryLimit(), request.gpuOverQuotaWeight(), request.cpuOverQuotaWeight(),
-                request.memoryOverQuotaWeight(), request.extra());
+                request.memoryOverQuotaWeight(), request.nodePool());
         PolicyDto dto = toDto(policyRepository.save(policy));
         syncQueues(policy);
         return dto;
@@ -101,8 +101,8 @@ public class PolicyService {
         if (request.memoryOverQuotaWeight().isPresent()) {
             policy.setMemoryOverQuotaWeight(request.memoryOverQuotaWeight().orElse(null));
         }
-        if (request.extra().isPresent()) {
-            policy.setExtra(request.extra().orElse(null));
+        if (request.nodePool().isPresent()) {
+            policy.setExtra(nodePoolExtra(request.nodePool().orElse(null)));
         }
 
         PolicyDto dto = toDto(policyRepository.save(policy));
@@ -130,7 +130,7 @@ public class PolicyService {
             Integer gpuOverQuotaWeight,
             Integer cpuOverQuotaWeight,
             Integer memoryOverQuotaWeight,
-            Map<String, Object> extra) {
+            List<String> nodePool) {
         Cluster cluster = clusterRepository.findById(clusterId)
                 .orElseThrow(() -> new EntityNotFoundException("Cluster not found with id: " + clusterId));
 
@@ -146,7 +146,12 @@ public class PolicyService {
         policy.setGpuOverQuotaWeight(gpuOverQuotaWeight);
         policy.setCpuOverQuotaWeight(cpuOverQuotaWeight);
         policy.setMemoryOverQuotaWeight(memoryOverQuotaWeight);
-        policy.setExtra(extra);
+        policy.setExtra(nodePoolExtra(nodePool));
+    }
+
+    /** Wrap a node-pool list into the {@code extra} JSONB shape {@code {"nodePool": [...]}}. */
+    private static Map<String, Object> nodePoolExtra(List<String> nodePool) {
+        return Map.of("nodePool", nodePool == null ? List.of() : nodePool);
     }
 
     private void syncQueues(Policy policy) {
@@ -195,7 +200,7 @@ public class PolicyService {
                 policy.getGpuOverQuotaWeight(),
                 policy.getCpuOverQuotaWeight(),
                 policy.getMemoryOverQuotaWeight(),
-                policy.getExtra(),
+                policy.nodePool(),
                 policy.getCreatedAt(),
                 policy.getUpdatedAt()
         );

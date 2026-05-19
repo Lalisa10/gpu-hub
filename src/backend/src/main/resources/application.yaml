@@ -21,6 +21,8 @@ object-storage:
 
 kubernetes:
   kubeconfig-bucket: ${KUBERNETES_KUBECONFIG_BUCKET:kubeconfig}
+  connection-timeout-ms: ${KUBERNETES_CONNECTION_TIMEOUT_MS:10000}
+  request-timeout-ms: ${KUBERNETES_REQUEST_TIMEOUT_MS:15000}
 
 juicefs:
   storage-class: ${JUICEFS_STORAGE_CLASS:juicefs-sc}

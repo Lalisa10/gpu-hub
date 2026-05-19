@@ -55,7 +55,7 @@ public class DataSourceController {
     }
 
     @PostMapping
-    @PreAuthorize("hasRole('ADMIN') or @rbac.canManageTeam(#request.teamId())")
+    @PreAuthorize("isAuthenticated()")
     public ResponseEntity<DataSourceDto> create(@RequestBody @Valid CreateDataSourceRequest request) {
         DataSourceDto saved = dataSourceService.create(request);
         return ResponseEntity.created(URI.create("/api/data-sources/" + saved.id())).body(saved);

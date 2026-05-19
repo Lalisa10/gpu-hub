@@ -30,7 +30,7 @@ public class NotebookSpecBuilder {
     private final ObjectMapper objectMapper = new ObjectMapper();
 
     public GenericKubernetesResource build(Workload workload, String k8sName, String namespace,
-            String queueName, List<VolumeMountSpec> mounts) {
+            String queueName, List<VolumeMountSpec> mounts, List<String> nodePool) {
         Map<String, Object> resources = new HashMap<>();
         Map<String, String> requests = new HashMap<>();
         Map<String, String> limits = new HashMap<>();
@@ -104,6 +104,10 @@ public class NotebookSpecBuilder {
         podSpec.put("priorityClassName", workload.getPriorityClass().dbValue);
         if (!podVolumes.isEmpty()) podSpec.put("volumes", podVolumes);
 
+        // Node affinity — restrict scheduling to the policy node pool intersection.
+        Map<String, Object> affinity = nodeAffinity(nodePool);
+        if (affinity != null) podSpec.put("affinity", affinity);
+
         Map<String, Object> templateMetadata = Map.of("labels", podLabels);
         Map<String, Object> template = Map.of("metadata", templateMetadata, "spec", podSpec);
         Map<String, Object> spec = Map.of("template", template);
@@ -118,5 +122,24 @@ public class NotebookSpecBuilder {
                 .endMetadata()
                 .withAdditionalProperties(Map.of("spec", spec))
                 .build();
+    }
+
+    /**
+     * Builds a required nodeAffinity restricting the pod to the given node names.
+     * One {@code nodeSelectorTerm} per node (terms are OR-ed) — {@code matchFields}
+     * with {@code metadata.name In} only allows a single value per requirement.
+     * Returns {@code null} when the pool is empty (no restriction).
+     */
+    private static Map<String, Object> nodeAffinity(List<String> nodePool) {
+        if (nodePool == null || nodePool.isEmpty()) return null;
+        List<Map<String, Object>> terms = nodePool.stream()
+                .map(name -> Map.<String, Object>of("matchFields", List.of(Map.of(
+                        "key", "metadata.name",
+                        "operator", "In",
+                        "values", List.of(name)))))
+                .toList();
+        return Map.of("nodeAffinity", Map.of(
+                "requiredDuringSchedulingIgnoredDuringExecution",
+                Map.of("nodeSelectorTerms", terms)));
     }
 }

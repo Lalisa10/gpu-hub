@@ -231,10 +231,10 @@ export default function ClustersPage() {
   const [deleteTarget, setDeleteTarget] = useState<ClusterDto | null>(null);
   const [uploadTarget, setUploadTarget] = useState<ClusterDto | null>(null);
   const [selectedFile, setSelectedFile] = useState<File | null>(null);
+  const [createFile, setCreateFile] = useState<File | null>(null);
   const [form, setForm] = useState({
     name: '',
     description: '',
-    kubeconfigRef: '',
   });
   const fileInputRef = useRef<HTMLInputElement>(null);
 
@@ -242,12 +242,15 @@ export default function ClustersPage() {
   const { data: clusterDetails, isLoading: detailsLoading, isError: detailsError } =
     useClusterDetailsStream(drawerCluster?.id ?? null, !!drawerCluster);
 
-  // Background fetch for GPU Summary column
+  // Background fetch for GPU Summary column.
+  // retry:false — a cluster with a broken kubeconfig should fail fast, not
+  // retry and double the wait.
   const gpuQueries = useQueries({
     queries: clusters.map((c) => ({
       queryKey: ['clusters', c.id, 'details'],
       queryFn: () => clusterService.getDetails(c.id),
       staleTime: 60_000,
+      retry: false,
     })),
   });
   const gpuSummaryMap = Object.fromEntries(
@@ -287,7 +290,7 @@ export default function ClustersPage() {
           <Button
             variant="ghost"
             size="sm"
-            title="Upload kubeconfig"
+            title="Replace kubeconfig"
             onClick={(e) => {
               e.stopPropagation();
               setUploadTarget(c);
@@ -313,22 +316,33 @@ export default function ClustersPage() {
   ];
 
   const handleCreate = async () => {
-    await createCluster.mutateAsync({
-      name: form.name,
-      description: form.description || undefined,
-      kubeconfigRef: form.kubeconfigRef || undefined,
-    });
-    toast.success(`Cluster "${form.name}" created`);
-    setShowCreate(false);
-    setForm({ name: '', description: '', kubeconfigRef: '' });
+    if (!form.name || !createFile) return;
+    try {
+      await createCluster.mutateAsync({
+        meta: { name: form.name, description: form.description || undefined },
+        file: createFile,
+      });
+      toast.success(`Cluster "${form.name}" created`);
+      setShowCreate(false);
+      setForm({ name: '', description: '' });
+      setCreateFile(null);
+    } catch {
+      // Validation/connection error — keep the dialog open so the user can retry.
+      // The global mutation onError handler already shows the message toast.
+    }
   };
 
   const handleUpload = async () => {
     if (!uploadTarget || !selectedFile) return;
-    await uploadKubeconfig.mutateAsync({ id: uploadTarget.id, file: selectedFile });
-    toast.success(`Kubeconfig uploaded for "${uploadTarget.name}"`);
-    setUploadTarget(null);
-    setSelectedFile(null);
+    try {
+      await uploadKubeconfig.mutateAsync({ id: uploadTarget.id, file: selectedFile });
+      toast.success(`Kubeconfig replaced for "${uploadTarget.name}"`);
+      setUploadTarget(null);
+      setSelectedFile(null);
+    } catch {
+      // Validation/connection error — keep the dialog open for retry.
+      // The global mutation onError handler already shows the message toast.
+    }
   };
 
   return (
@@ -357,12 +371,21 @@ export default function ClustersPage() {
               <Input value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} />
             </div>
             <div className="space-y-2">
-              <Label>Kubeconfig Reference</Label>
+              <Label>Kubeconfig file *</Label>
               <Input
-                value={form.kubeconfigRef}
-                onChange={(e) => setForm({ ...form, kubeconfigRef: e.target.value })}
-                placeholder="MinIO object key (optional — upload after creation)"
+                type="file"
+                accept=".yaml,.yml,.conf,.kubeconfig"
+                onChange={(e) => setCreateFile(e.target.files?.[0] ?? null)}
               />
+              {createFile ? (
+                <p className="text-xs text-muted-foreground">
+                  {createFile.name} ({(createFile.size / 1024).toFixed(1)} KB)
+                </p>
+              ) : (
+                <p className="text-xs text-muted-foreground">
+                  Required — the cluster connection is verified before it is created.
+                </p>
+              )}
             </div>
             <div className="space-y-2">
               <Label>Description</Label>
@@ -376,8 +399,11 @@ export default function ClustersPage() {
             <Button variant="outline" onClick={() => setShowCreate(false)}>
               Cancel
             </Button>
-            <Button onClick={handleCreate} disabled={createCluster.isPending || !form.name}>
-              {createCluster.isPending ? 'Creating...' : 'Create'}
+            <Button
+              onClick={handleCreate}
+              disabled={createCluster.isPending || !form.name || !createFile}
+            >
+              {createCluster.isPending ? 'Verifying & creating...' : 'Create'}
             </Button>
           </DialogFooter>
         </DialogContent>
@@ -387,17 +413,13 @@ export default function ClustersPage() {
       <Dialog open={!!uploadTarget} onOpenChange={() => setUploadTarget(null)}>
         <DialogContent>
           <DialogHeader>
-            <DialogTitle>Upload Kubeconfig — {uploadTarget?.name}</DialogTitle>
+            <DialogTitle>Replace Kubeconfig — {uploadTarget?.name}</DialogTitle>
           </DialogHeader>
           <div className="space-y-4">
             <p className="text-sm text-muted-foreground">
-              The file will be stored in MinIO under{' '}
-              <code className="rounded bg-muted px-1 py-0.5 text-xs">
-                clusters/{uploadTarget?.id}/kubeconfig
-              </code>{' '}
-              and the cluster's{' '}
-              <code className="rounded bg-muted px-1 py-0.5 text-xs">kubeconfigRef</code> will be
-              updated automatically.
+              The new kubeconfig is verified against the cluster before it replaces the
+              current one — an invalid or unreachable config is rejected and the existing
+              kubeconfig is kept.
             </p>
             <div className="space-y-2">
               <Label>Kubeconfig file</Label>
@@ -419,7 +441,7 @@ export default function ClustersPage() {
               Cancel
             </Button>
             <Button onClick={handleUpload} disabled={!selectedFile || uploadKubeconfig.isPending}>
-              {uploadKubeconfig.isPending ? 'Uploading...' : 'Upload'}
+              {uploadKubeconfig.isPending ? 'Verifying & replacing...' : 'Replace'}
             </Button>
           </DialogFooter>
         </DialogContent>

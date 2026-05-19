@@ -17,6 +17,7 @@ import org.springframework.web.bind.annotation.PutMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestParam;
+import org.springframework.web.bind.annotation.RequestPart;
 import org.springframework.web.bind.annotation.RestController;
 import org.springframework.web.multipart.MultipartFile;
 import org.springframework.web.servlet.mvc.method.annotation.SseEmitter;
@@ -47,9 +48,11 @@ public class ClusterController {
         return ResponseEntity.ok(clusterService.findById(id));
     }
 
-    @PostMapping
-    public ResponseEntity<ClusterDto> post(@RequestBody @Valid JoinClusterRequest request) {
-        ClusterDto saved = clusterService.save(request);
+    @PostMapping(consumes = MediaType.MULTIPART_FORM_DATA_VALUE)
+    public ResponseEntity<ClusterDto> post(
+            @RequestPart("data") @Valid JoinClusterRequest request,
+            @RequestPart("file") MultipartFile file) {
+        ClusterDto saved = clusterService.create(request, file);
         URI location = URI.create("/api/clusters/" + saved.id());
         return ResponseEntity.created(location).body(saved);
     }
@@ -80,6 +83,11 @@ public class ClusterController {
             @PathVariable UUID id,
             @RequestParam("file") MultipartFile file) {
         return ResponseEntity.ok(clusterService.uploadKubeconfig(id, file));
+    }
+
+    @GetMapping("/{id}/nodes")
+    public ResponseEntity<List<String>> getNodes(@PathVariable UUID id) {
+        return ResponseEntity.ok(clusterService.listNodeNames(id));
     }
 
     @GetMapping("/{id}/details")

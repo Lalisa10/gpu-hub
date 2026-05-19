@@ -17,9 +17,13 @@ import com.trucdnd.gpu_hub_backend.workload.dto.VolumeMountSpec;
 import com.trucdnd.gpu_hub_backend.workload.dto.WorkloadExtra;
 import com.trucdnd.gpu_hub_backend.workload.entity.Workload;
 
+import io.fabric8.kubernetes.api.model.Affinity;
+import io.fabric8.kubernetes.api.model.AffinityBuilder;
 import io.fabric8.kubernetes.api.model.ContainerBuilder;
 import io.fabric8.kubernetes.api.model.ContainerPortBuilder;
 import io.fabric8.kubernetes.api.model.EmptyDirVolumeSourceBuilder;
+import io.fabric8.kubernetes.api.model.NodeSelectorTerm;
+import io.fabric8.kubernetes.api.model.NodeSelectorTermBuilder;
 import io.fabric8.kubernetes.api.model.EnvVar;
 import io.fabric8.kubernetes.api.model.EnvVarBuilder;
 import io.fabric8.kubernetes.api.model.PersistentVolumeClaimVolumeSourceBuilder;
@@ -44,7 +48,7 @@ public class DeploymentSpecBuilder {
     private final ObjectMapper objectMapper = new ObjectMapper();
 
     public Deployment build(Workload workload, String k8sName, String namespace, String queueName,
-            List<VolumeMountSpec> mounts) {
+            List<VolumeMountSpec> mounts, List<String> nodePool) {
         LlmInferenceExtra extra = parseExtra(workload.getExtra());
         if (extra.modelSource() == null || extra.modelSource().isBlank()) {
             throw new IllegalArgumentException("modelSource is required for LLM_INFERENCE workloads");
@@ -115,6 +119,9 @@ public class DeploymentSpecBuilder {
                     .build());
         }
 
+        // Node affinity — restrict scheduling to the policy node pool intersection (null = none).
+        Affinity affinity = nodeAffinity(nodePool);
+
         return new DeploymentBuilder()
                 .withNewMetadata()
                     .withName(k8sName)
@@ -133,6 +140,7 @@ public class DeploymentSpecBuilder {
                         .withNewSpec()
                             .withSchedulerName("kai-scheduler")
                             .withPriorityClassName(workload.getPriorityClass().dbValue)
+                            .withAffinity(affinity)
                             .withVolumes(podVolumes)
                             .withContainers(new ContainerBuilder()
                                     .withName(k8sName)
@@ -149,6 +157,32 @@ public class DeploymentSpecBuilder {
                         .endSpec()
                     .endTemplate()
                 .endSpec()
+                .build();
+    }
+
+    /**
+     * Builds a required nodeAffinity restricting the pod to the given node names.
+     * One {@code nodeSelectorTerm} per node (OR-ed) — {@code matchFields} with
+     * {@code metadata.name In} allows only a single value per requirement.
+     * Returns {@code null} when the pool is empty (no restriction).
+     */
+    private Affinity nodeAffinity(List<String> nodePool) {
+        if (nodePool == null || nodePool.isEmpty()) return null;
+        List<NodeSelectorTerm> terms = nodePool.stream()
+                .map(name -> new NodeSelectorTermBuilder()
+                        .addNewMatchField()
+                            .withKey("metadata.name")
+                            .withOperator("In")
+                            .withValues(name)
+                        .endMatchField()
+                        .build())
+                .toList();
+        return new AffinityBuilder()
+                .withNewNodeAffinity()
+                    .withNewRequiredDuringSchedulingIgnoredDuringExecution()
+                        .withNodeSelectorTerms(terms)
+                    .endRequiredDuringSchedulingIgnoredDuringExecution()
+                .endNodeAffinity()
                 .build();
     }
 

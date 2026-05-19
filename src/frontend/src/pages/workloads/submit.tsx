@@ -169,41 +169,41 @@ export default function SubmitWorkloadPage() {
                   />
                 </div>
                 <div className="space-y-1.5">
-                  <Label className={LABEL_CLS}>Docker Image *</Label>
-                  <Input
-                    className={INPUT_CLS}
-                    value={image}
-                    onChange={(e) => setImage(e.target.value)}
-                    placeholder={tab === 'notebook' ? 'jupyter/scipy-notebook:latest' : 'vllm/vllm-openai:latest'}
-                  />
-                  <p className="text-[11px] text-muted-foreground">Must be accessible from the cluster registry</p>
+                  <Label className={LABEL_CLS}>Project *</Label>
+                  <Select value={projectId} onValueChange={(v) => v && setProjectId(v)}>
+                    <SelectTrigger className={`w-full ${INPUT_CLS}`}>
+                      {projectId ? (
+                        <span>{accessibleProjects.find((p) => p.id === projectId)?.name ?? '—'}</span>
+                      ) : (
+                        <span className="text-muted-foreground">Select project</span>
+                      )}
+                    </SelectTrigger>
+                    <SelectContent>
+                      {accessibleProjects.map((p) => {
+                        const team = teams.find((t) => t.id === p.teamId);
+                        const cluster = clusters.find((c) => c.id === p.clusterId);
+                        const label = team && cluster
+                          ? `${p.name} (${team.name} · ${cluster.name})`
+                          : p.name;
+                        return (
+                          <SelectItem key={p.id} value={p.id}>
+                            {label}
+                          </SelectItem>
+                        );
+                      })}
+                    </SelectContent>
+                  </Select>
                 </div>
               </div>
               <div className="space-y-1.5">
-                <Label className={LABEL_CLS}>Project *</Label>
-                <Select value={projectId} onValueChange={(v) => v && setProjectId(v)}>
-                  <SelectTrigger className={INPUT_CLS}>
-                    {projectId ? (
-                      <span>{accessibleProjects.find((p) => p.id === projectId)?.name ?? '—'}</span>
-                    ) : (
-                      <span className="text-muted-foreground">Select project</span>
-                    )}
-                  </SelectTrigger>
-                  <SelectContent>
-                    {accessibleProjects.map((p) => {
-                      const team = teams.find((t) => t.id === p.teamId);
-                      const cluster = clusters.find((c) => c.id === p.clusterId);
-                      const label = team && cluster
-                        ? `${p.name} (${team.name} · ${cluster.name})`
-                        : p.name;
-                      return (
-                        <SelectItem key={p.id} value={p.id}>
-                          {label}
-                        </SelectItem>
-                      );
-                    })}
-                  </SelectContent>
-                </Select>
+                <Label className={LABEL_CLS}>Docker Image *</Label>
+                <Input
+                  className={`w-full ${INPUT_CLS}`}
+                  value={image}
+                  onChange={(e) => setImage(e.target.value)}
+                  placeholder={tab === 'notebook' ? 'jupyter/scipy-notebook:latest' : 'vllm/vllm-openai:latest'}
+                />
+                <p className="text-[11px] text-muted-foreground">Must be accessible from the cluster registry</p>
               </div>
             </div>
           </Section>
@@ -243,7 +243,7 @@ export default function SubmitWorkloadPage() {
                 />
               </div>
               <div className="space-y-1.5">
-                <Label className={LABEL_CLS}>Shared Memory /dev/shm (GiB)</Label>
+                <Label className={LABEL_CLS}>Shared Memory (GiB)</Label>
                 <Input
                   className={INPUT_CLS}
                   type="number"

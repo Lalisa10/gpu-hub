@@ -97,6 +97,9 @@ public class WorkloadService {
 
         List<VolumeMountSpec> mounts = resolveRequestedSources(project, cluster, request.sources());
 
+        // Node affinity = intersection of the project policy's and the team policy's node pools.
+        List<String> nodePool = resolveEffectiveNodePool(project, teamCluster);
+
         Workload entity = Workload.builder()
                 .project(project)
                 .cluster(cluster)
@@ -119,9 +122,29 @@ public class WorkloadService {
         }
 
         String k8sName = buildK8sName(saved);
-        submit(saved, k8sName, teamCluster.getNamespace(), mounts);
+        submit(saved, k8sName, teamCluster.getNamespace(), mounts, nodePool);
 
         return toDto(saved);
+    }
+
+    /**
+     * Effective node pool for a workload = intersection of the project policy's pool and the
+     * team policy's pool. An empty pool means "no restriction" — the intersection then collapses
+     * to the other side. If both pools are non-empty and disjoint, the workload cannot be
+     * scheduled anywhere, so creation is rejected.
+     */
+    private List<String> resolveEffectiveNodePool(Project project, TeamCluster teamCluster) {
+        List<String> projectPool = project.getPolicy().nodePool();
+        List<String> teamPool = teamCluster.getPolicy().nodePool();
+        if (projectPool.isEmpty()) return teamPool;
+        if (teamPool.isEmpty()) return projectPool;
+        Set<String> teamSet = new HashSet<>(teamPool);
+        List<String> intersection = projectPool.stream().distinct().filter(teamSet::contains).toList();
+        if (intersection.isEmpty()) {
+            throw new IllegalArgumentException(
+                    "Node pool của policy project và policy team không giao nhau — workload không thể lập lịch");
+        }
+        return intersection;
     }
 
     private List<VolumeMountSpec> resolveRequestedSources(Project project, Cluster cluster,
@@ -298,17 +321,18 @@ public class WorkloadService {
         return nameGenerator.generateWorkloadName(workload.getSubmittedBy().getUsername(), kind);
     }
 
-    private void submit(Workload workload, String k8sName, String namespace, List<VolumeMountSpec> mounts) {
+    private void submit(Workload workload, String k8sName, String namespace,
+            List<VolumeMountSpec> mounts, List<String> nodePool) {
         String queueName = workload.getProject().getName();
         switch (workload.getWorkloadType()) {
             case NOTEBOOK -> {
                 GenericKubernetesResource notebook = notebookSpecBuilder.build(
-                        workload, k8sName, namespace, queueName, mounts);
+                        workload, k8sName, namespace, queueName, mounts, nodePool);
                 notebookService.create(workload.getCluster(), notebook);
             }
             case LLM_INFERENCE -> {
                 Deployment deployment = deploymentSpecBuilder.build(
-                        workload, k8sName, namespace, queueName, mounts);
+                        workload, k8sName, namespace, queueName, mounts, nodePool);
                 builtinResourceService.createDeployment(workload.getCluster(), namespace, deployment);
             }
         }

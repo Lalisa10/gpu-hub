@@ -7,6 +7,7 @@ import java.util.UUID;
 import java.util.stream.Collectors;
 
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
 import org.springframework.web.multipart.MultipartFile;
 import com.trucdnd.gpu_hub_backend.cluster.dto.*;
 import com.trucdnd.gpu_hub_backend.cluster.entity.Cluster;
@@ -14,18 +15,24 @@ import com.trucdnd.gpu_hub_backend.cluster.mapper.ClusterMapper;
 import com.trucdnd.gpu_hub_backend.cluster.repository.ClusterRepository;
 import com.trucdnd.gpu_hub_backend.common.constants.Cluster.Status;
 import com.trucdnd.gpu_hub_backend.kubernetes.config.KubernetesProperties;
+import com.trucdnd.gpu_hub_backend.kubernetes.factory.KubernetesClientFactory;
 import com.trucdnd.gpu_hub_backend.kubernetes.service.BuiltinResourceService;
 import com.trucdnd.gpu_hub_backend.object_storage.service.ObjectStorageService;
 import com.trucdnd.gpu_hub_backend.workload.entity.Workload;
 import com.trucdnd.gpu_hub_backend.workload.repository.WorkloadRepository;
 
 import io.fabric8.kubernetes.api.model.Container;
+import io.fabric8.kubernetes.api.model.ListOptionsBuilder;
 import io.fabric8.kubernetes.api.model.Node;
 import io.fabric8.kubernetes.api.model.Pod;
 import io.fabric8.kubernetes.api.model.Quantity;
 import io.fabric8.kubernetes.api.model.ResourceRequirements;
+import io.fabric8.kubernetes.client.KubernetesClient;
 import jakarta.persistence.EntityNotFoundException;
 import lombok.RequiredArgsConstructor;
+
+import java.io.ByteArrayInputStream;
+import java.nio.charset.StandardCharsets;
 
 import java.util.HashMap;
 import java.util.Map;
@@ -39,6 +46,7 @@ public class ClusterService {
     private final KubernetesProperties kubernetesProperties;
     private final BuiltinResourceService builtinResourceService;
     private final WorkloadRepository workloadRepository;
+    private final KubernetesClientFactory clientFactory;
 
     public List<ClusterDto> findAll() {
         return clusterRepository.findAll()
@@ -53,11 +61,70 @@ public class ClusterService {
                 .orElseThrow(() -> new EntityNotFoundException("Cluster not found with id: " + id));
     }
 
-    public ClusterDto save(JoinClusterRequest joinClusterRequest) {
-        Cluster cluster = ClusterMapper.toCluster(joinClusterRequest);
-        cluster.setStatus(Status.ACTIVE);
-        Cluster saved = clusterRepository.save(cluster);
-        return ClusterMapper.toDto(saved);
+    /**
+     * Register a cluster together with its kubeconfig in one atomic step.
+     * The kubeconfig is validated with a real (timeout-bounded) connection before
+     * anything is persisted — a bad/unreachable kubeconfig yields a 400 and no row.
+     */
+    @Transactional
+    public ClusterDto create(JoinClusterRequest request, MultipartFile kubeconfigFile) {
+        if (kubeconfigFile == null || kubeconfigFile.isEmpty()) {
+            throw new IllegalArgumentException("Kubeconfig file is required");
+        }
+        String kubeconfig = readKubeconfig(kubeconfigFile);
+        validateKubeconfig(kubeconfig);
+
+        Cluster cluster = Cluster.builder()
+                .name(request.name())
+                .description(request.description())
+                .status(Status.ACTIVE)
+                .build();
+        cluster = clusterRepository.save(cluster);
+
+        String objectKey = "clusters/" + cluster.getId() + "/kubeconfig";
+        storeKubeconfig(objectKey, kubeconfigFile);
+        cluster.setKubeconfigRef(objectKey);
+        return ClusterMapper.toDto(clusterRepository.save(cluster));
+    }
+
+    private String readKubeconfig(MultipartFile file) {
+        try {
+            return new String(file.getBytes(), StandardCharsets.UTF_8);
+        } catch (IOException e) {
+            throw new IllegalStateException("Failed to read uploaded kubeconfig file", e);
+        }
+    }
+
+    private void storeKubeconfig(String objectKey, MultipartFile file) {
+        try {
+            objectStorageService.putObject(
+                    kubernetesProperties.getKubeconfigBucket(),
+                    objectKey,
+                    file.getInputStream(),
+                    file.getSize(),
+                    file.getContentType() != null ? file.getContentType() : "application/octet-stream"
+            );
+        } catch (IOException e) {
+            throw new IllegalStateException("Failed to read uploaded kubeconfig file", e);
+        }
+    }
+
+    /** Parse the kubeconfig and probe the cluster with a bounded request. */
+    private void validateKubeconfig(String kubeconfig) {
+        try (KubernetesClient client = clientFactory.createClientFromKubeconfig(kubeconfig)) {
+            client.namespaces().list(new ListOptionsBuilder().withLimit(1L).build());
+        } catch (Exception e) {
+            throw new IllegalArgumentException(
+                    "Kubeconfig không kết nối được tới cluster: " + rootMessage(e));
+        }
+    }
+
+    private static String rootMessage(Throwable t) {
+        Throwable cur = t;
+        while (cur.getCause() != null && cur.getCause() != cur) {
+            cur = cur.getCause();
+        }
+        return cur.getMessage() != null ? cur.getMessage() : cur.getClass().getSimpleName();
     }
 
     public void delete(UUID id) {
@@ -110,22 +177,27 @@ public class ClusterService {
     public ClusterDto uploadKubeconfig(UUID id, MultipartFile file) {
         Cluster cluster = clusterRepository.findById(id)
                 .orElseThrow(() -> new EntityNotFoundException("Cluster not found with id: " + id));
+        if (file == null || file.isEmpty()) {
+            throw new IllegalArgumentException("Kubeconfig file is required");
+        }
+
+        // Validate before overwriting — a bad upload must not replace a working kubeconfig.
+        validateKubeconfig(readKubeconfig(file));
 
         String objectKey = "clusters/" + id + "/kubeconfig";
-        try {
-            objectStorageService.putObject(
-                    kubernetesProperties.getKubeconfigBucket(),
-                    objectKey,
-                    file.getInputStream(),
-                    file.getSize(),
-                    file.getContentType() != null ? file.getContentType() : "application/octet-stream"
-            );
-        } catch (IOException e) {
-            throw new IllegalStateException("Failed to read uploaded kubeconfig file", e);
-        }
+        storeKubeconfig(objectKey, file);
 
         cluster.setKubeconfigRef(objectKey);
         return ClusterMapper.toDto(clusterRepository.save(cluster));
+    }
+
+    /** Lightweight node-name listing for the cluster — used to populate policy node pools. */
+    public List<String> listNodeNames(UUID id) {
+        Cluster cluster = clusterRepository.findById(id)
+                .orElseThrow(() -> new EntityNotFoundException("Cluster not found: " + id));
+        return builtinResourceService.listNodes(cluster).stream()
+                .map(n -> n.getMetadata().getName())
+                .toList();
     }
 
     public ClusterDetailsDto getClusterDetails(UUID id) {

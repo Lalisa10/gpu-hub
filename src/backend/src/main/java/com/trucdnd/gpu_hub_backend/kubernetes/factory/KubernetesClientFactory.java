@@ -11,5 +11,8 @@ public interface KubernetesClientFactory {
     KubernetesClient createClient(UUID clusterId);
 
     KubernetesClient createClient(Cluster cluster);
+
+    /** Build a client straight from a raw kubeconfig string (e.g. to validate an upload). */
+    KubernetesClient createClientFromKubeconfig(String kubeconfig);
 }
 // 
