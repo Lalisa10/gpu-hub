@@ -14,10 +14,12 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import com.trucdnd.gpu_hub_backend.kubernetes.util.K8sLabels;
 import com.trucdnd.gpu_hub_backend.workload.dto.LlmInferenceExtra;
 import com.trucdnd.gpu_hub_backend.workload.dto.VolumeMountSpec;
+import com.trucdnd.gpu_hub_backend.workload.dto.WorkloadExtra;
 import com.trucdnd.gpu_hub_backend.workload.entity.Workload;
 
 import io.fabric8.kubernetes.api.model.ContainerBuilder;
 import io.fabric8.kubernetes.api.model.ContainerPortBuilder;
+import io.fabric8.kubernetes.api.model.EmptyDirVolumeSourceBuilder;
 import io.fabric8.kubernetes.api.model.EnvVar;
 import io.fabric8.kubernetes.api.model.EnvVarBuilder;
 import io.fabric8.kubernetes.api.model.PersistentVolumeClaimVolumeSourceBuilder;
@@ -36,6 +38,8 @@ public class DeploymentSpecBuilder {
 
     private static final int VLLM_CONTAINER_PORT = 8000;
     private static final String TEAM_DATA_VOLUME_NAME = "team-data";
+    static final String SHM_VOLUME_NAME = "dshm";
+    static final String SHM_MOUNT_PATH = "/dev/shm";
 
     private final ObjectMapper objectMapper = new ObjectMapper();
 
@@ -93,6 +97,22 @@ public class DeploymentSpecBuilder {
                 if (m.readOnly()) mountBuilder.withReadOnly(true);
                 containerMounts.add(mountBuilder.build());
             }
+        }
+
+        // Shared-memory volume (/dev/shm) — opt-in via extra.shmSize
+        WorkloadExtra workloadExtra = WorkloadExtra.parse(workload.getExtra(), objectMapper);
+        if (workloadExtra.hasShmSize()) {
+            podVolumes.add(new VolumeBuilder()
+                    .withName(SHM_VOLUME_NAME)
+                    .withEmptyDir(new EmptyDirVolumeSourceBuilder()
+                            .withMedium("Memory")
+                            .withSizeLimit(new Quantity(workloadExtra.shmSize()))
+                            .build())
+                    .build());
+            containerMounts.add(new VolumeMountBuilder()
+                    .withName(SHM_VOLUME_NAME)
+                    .withMountPath(SHM_MOUNT_PATH)
+                    .build());
         }
 
         return new DeploymentBuilder()

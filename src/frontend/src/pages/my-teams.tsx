@@ -76,6 +76,10 @@ export default function MyTeamsPage() {
     ? clusters.filter((c) => teamClusters.some((tc) => tc.teamId === selectedTeam.id && tc.clusterId === c.id))
     : [];
 
+  const userName = (id: string) => users.find((u) => u.id === id)?.username ?? null;
+  const clusterName = (id: string) => clusters.find((c) => c.id === id)?.name ?? null;
+  const policyName = (id: string) => policies.find((p) => p.id === id)?.name ?? null;
+
   const teamColumns: Column<TeamDto>[] = [
     { header: 'Team', accessor: 'name' },
     { header: 'Members', accessor: (t) => allMembers.filter((m) => m.teamId === t.id).length },
@@ -176,7 +180,11 @@ export default function MyTeamsPage() {
             <div className="space-y-2">
               <Label>User</Label>
               <Select value={memberForm.userId} onValueChange={(v) => v && setMemberForm({ ...memberForm, userId: v })}>
-                <SelectTrigger><SelectValue placeholder="Select user" /></SelectTrigger>
+                <SelectTrigger>
+                  <SelectValue placeholder="Select user">
+                    {memberForm.userId ? userName(memberForm.userId) : null}
+                  </SelectValue>
+                </SelectTrigger>
                 <SelectContent>
                   {users.filter((u) => !teamMembers.some((m) => m.userId === u.id)).map((u) => (
                     <SelectItem key={u.id} value={u.id}>{u.username}</SelectItem>
@@ -228,7 +236,11 @@ export default function MyTeamsPage() {
                 value={projectForm.clusterId}
                 onValueChange={(v) => v && setProjectForm({ ...projectForm, clusterId: v, policyId: '' })}
               >
-                <SelectTrigger><SelectValue placeholder="Select cluster" /></SelectTrigger>
+                <SelectTrigger>
+                  <SelectValue placeholder="Select cluster">
+                    {projectForm.clusterId ? clusterName(projectForm.clusterId) : null}
+                  </SelectValue>
+                </SelectTrigger>
                 <SelectContent>
                   {availableClusters.map((c) => (
                     <SelectItem key={c.id} value={c.id}>{c.name}</SelectItem>
@@ -243,7 +255,11 @@ export default function MyTeamsPage() {
                 onValueChange={(v) => v && setProjectForm({ ...projectForm, policyId: v })}
                 disabled={!projectForm.clusterId}
               >
-                <SelectTrigger><SelectValue placeholder="Select policy" /></SelectTrigger>
+                <SelectTrigger>
+                  <SelectValue placeholder="Select policy">
+                    {projectForm.policyId ? policyName(projectForm.policyId) : null}
+                  </SelectValue>
+                </SelectTrigger>
                 <SelectContent>
                   {policies.filter((p) => p.clusterId === projectForm.clusterId).map((p) => (
                     <SelectItem key={p.id} value={p.id}>{p.name}</SelectItem>

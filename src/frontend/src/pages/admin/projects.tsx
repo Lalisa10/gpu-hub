@@ -120,7 +120,11 @@ export default function ProjectsPage() {
                 value={form.teamId}
                 onValueChange={(v) => v && setForm({ ...form, teamId: v, clusterId: '', policyId: '' })}
               >
-                <SelectTrigger><SelectValue placeholder="Select team" /></SelectTrigger>
+                <SelectTrigger>
+                  <SelectValue placeholder="Select team">
+                    {form.teamId ? teamName(form.teamId) : null}
+                  </SelectValue>
+                </SelectTrigger>
                 <SelectContent>
                   {teams.map((t) => (
                     <SelectItem key={t.id} value={t.id}>{t.name}</SelectItem>
@@ -135,7 +139,11 @@ export default function ProjectsPage() {
                 onValueChange={(v) => v && setForm({ ...form, clusterId: v, policyId: '' })}
                 disabled={!form.teamId}
               >
-                <SelectTrigger><SelectValue placeholder="Select cluster" /></SelectTrigger>
+                <SelectTrigger>
+                  <SelectValue placeholder="Select cluster">
+                    {form.clusterId ? clusterName(form.clusterId) : null}
+                  </SelectValue>
+                </SelectTrigger>
                 <SelectContent>
                   {availableClusters.map((c) => (
                     <SelectItem key={c.id} value={c.id}>{c.name}</SelectItem>
@@ -150,7 +158,11 @@ export default function ProjectsPage() {
                 onValueChange={(v) => v && updateField('policyId', v)}
                 disabled={!form.clusterId}
               >
-                <SelectTrigger><SelectValue placeholder="Select policy" /></SelectTrigger>
+                <SelectTrigger>
+                  <SelectValue placeholder="Select policy">
+                    {form.policyId ? policyName(form.policyId) : null}
+                  </SelectValue>
+                </SelectTrigger>
                 <SelectContent>
                   {availablePolicies.map((p) => (
                     <SelectItem key={p.id} value={p.id}>{p.name}</SelectItem>

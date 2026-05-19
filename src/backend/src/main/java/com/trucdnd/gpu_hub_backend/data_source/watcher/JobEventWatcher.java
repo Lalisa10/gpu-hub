@@ -49,13 +49,18 @@ public class JobEventWatcher {
 
     @PostConstruct
     public void startAll() {
+        // Run off the bean-init thread: a misconfigured/unreachable cluster blocks
+        // until its connection times out, which would delay application startup
+        // (and pod readiness) for every cluster sequentially.
         for (Cluster cluster : clusterRepository.findAll()) {
-            try {
-                startWatch(cluster);
-            } catch (RuntimeException e) {
-                log.warn("Failed to start job watch for cluster {}: {}", cluster.getId(), e.getMessage());
-                scheduleRestart(cluster);
-            }
+            restartScheduler.execute(() -> {
+                try {
+                    startWatch(cluster);
+                } catch (RuntimeException e) {
+                    log.warn("Failed to start job watch for cluster {}: {}", cluster.getId(), e.getMessage());
+                    scheduleRestart(cluster);
+                }
+            });
         }
     }
 

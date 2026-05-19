@@ -8,8 +8,10 @@ import java.util.Map;
 
 import org.springframework.stereotype.Component;
 
+import com.fasterxml.jackson.databind.ObjectMapper;
 import com.trucdnd.gpu_hub_backend.kubernetes.util.K8sLabels;
 import com.trucdnd.gpu_hub_backend.workload.dto.VolumeMountSpec;
+import com.trucdnd.gpu_hub_backend.workload.dto.WorkloadExtra;
 import com.trucdnd.gpu_hub_backend.workload.entity.Workload;
 
 import io.fabric8.kubernetes.api.model.GenericKubernetesResource;
@@ -22,6 +24,10 @@ public class NotebookSpecBuilder {
     private static final String KIND = "Notebook";
     public static final String WORKLOAD_ID_LABEL = K8sLabels.WORKLOAD_ID;
     public static final String TEAM_DATA_VOLUME_NAME = "team-data";
+    private static final String SHM_VOLUME_NAME = "dshm";
+    private static final String SHM_MOUNT_PATH = "/dev/shm";
+
+    private final ObjectMapper objectMapper = new ObjectMapper();
 
     public GenericKubernetesResource build(Workload workload, String k8sName, String namespace,
             String queueName, List<VolumeMountSpec> mounts) {
@@ -64,6 +70,18 @@ public class NotebookSpecBuilder {
                 containerMounts.add(mount);
             }
         }
+
+        // Shared-memory volume (/dev/shm) — opt-in via extra.shmSize
+        WorkloadExtra workloadExtra = WorkloadExtra.parse(workload.getExtra(), objectMapper);
+        if (workloadExtra.hasShmSize()) {
+            podVolumes.add(Map.of(
+                    "name", SHM_VOLUME_NAME,
+                    "emptyDir", Map.of("medium", "Memory", "sizeLimit", workloadExtra.shmSize())));
+            containerMounts.add(Map.of(
+                    "name", SHM_VOLUME_NAME,
+                    "mountPath", SHM_MOUNT_PATH));
+        }
+
         if (!containerMounts.isEmpty()) container.put("volumeMounts", containerMounts);
 
         Map<String, String> baseLabels = K8sLabels.standard(

@@ -111,10 +111,6 @@ function NodeCard({ node, expanded, onToggle }: {
 }
 
 function NodeResourceTable({ node }: { node: NodeInfoDto }) {
-  const cpuUtil = node.cpuCapacityMillis > 0 ? (node.cpuRequestMillis / node.cpuCapacityMillis) * 100 : 0;
-  const ramUtil = node.ramCapacityBytes > 0 ? (node.ramRequestBytes / node.ramCapacityBytes) * 100 : 0;
-  const gpuUtil = node.gpuTotal > 0 ? (node.gpuAllocated / node.gpuTotal) * 100 : 0;
-
   return (
     <div className="border-t bg-muted/30 px-4 py-3">
       <table className="w-full text-xs">
@@ -124,7 +120,6 @@ function NodeResourceTable({ node }: { node: NodeInfoDto }) {
             <th className="pb-2 text-right font-medium">Request</th>
             <th className="pb-2 text-right font-medium">Limit</th>
             <th className="pb-2 text-right font-medium">Capacity</th>
-            <th className="pb-2 text-right font-medium">Utilization</th>
           </tr>
         </thead>
         <tbody>
@@ -133,21 +128,18 @@ function NodeResourceTable({ node }: { node: NodeInfoDto }) {
             <td className="py-2 text-right">{formatCpu(node.cpuRequestMillis)}</td>
             <td className="py-2 text-right">{formatCpu(node.cpuLimitMillis)}</td>
             <td className="py-2 text-right">{formatCpu(node.cpuCapacityMillis)}</td>
-            <td className="py-2 text-right">{cpuUtil.toFixed(1)}%</td>
           </tr>
           <tr className="border-b last:border-0">
             <td className="py-2 font-medium">RAM</td>
             <td className="py-2 text-right">{formatBytes(node.ramRequestBytes)}</td>
             <td className="py-2 text-right">{formatBytes(node.ramLimitBytes)}</td>
             <td className="py-2 text-right">{formatBytes(node.ramCapacityBytes)}</td>
-            <td className="py-2 text-right">{ramUtil.toFixed(1)}%</td>
           </tr>
           <tr>
             <td className="py-2 font-medium">GPU</td>
             <td className="py-2 text-right">{node.gpuAllocated} Units</td>
             <td className="py-2 text-right">{node.gpuAllocated} Units</td>
             <td className="py-2 text-right">{node.gpuTotal} Units</td>
-            <td className="py-2 text-right">{gpuUtil.toFixed(1)}%</td>
           </tr>
         </tbody>
       </table>

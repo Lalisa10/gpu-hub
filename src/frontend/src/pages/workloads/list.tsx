@@ -277,11 +277,16 @@ export default function WorkloadListPage() {
                         <p className="mt-1">Model: {String(detailExtra.modelSource)}</p>
                       </div>
                     )}
-                    {!detailExtra.dockerImage && !detailExtra.modelSource && (
-                      <pre className="overflow-x-auto text-xs">
-                        {JSON.stringify(detailExtra, null, 2)}
-                      </pre>
+                    {detailExtra.shmSize != null && (
+                      <p className="mb-1">Shared Memory: {String(detailExtra.shmSize)}</p>
                     )}
+                    {!detailExtra.dockerImage &&
+                      !detailExtra.modelSource &&
+                      detailExtra.shmSize == null && (
+                        <pre className="overflow-x-auto text-xs">
+                          {JSON.stringify(detailExtra, null, 2)}
+                        </pre>
+                      )}
                   </div>
                 </section>
               )}

@@ -66,6 +66,13 @@ export default function TeamsPage() {
   const [memberForm, setMemberForm] = useState({ userId: '', role: 'MEMBER' as TeamRole });
   const [tcForm, setTcForm] = useState({ clusterId: '', policyId: '', pvcSize: '' });
 
+  const userLabel = (id: string) => {
+    const u = users.find((x) => x.id === id);
+    return u ? `${u.username} (${u.email})` : null;
+  };
+  const clusterName = (id: string) => clusters.find((c) => c.id === id)?.name ?? null;
+  const policyName = (id: string) => policies.find((p) => p.id === id)?.name ?? null;
+
   const teamColumns: Column<TeamDto>[] = [
     { header: 'Name', accessor: 'name' },
     { header: 'Description', accessor: (t) => t.description ?? '-' },
@@ -275,7 +282,9 @@ export default function TeamsPage() {
               <Label>User</Label>
               <Select value={memberForm.userId} onValueChange={(v) => v && setMemberForm({ ...memberForm, userId: v })}>
                 <SelectTrigger>
-                  <SelectValue placeholder="Select user" />
+                  <SelectValue placeholder="Select user">
+                    {memberForm.userId ? userLabel(memberForm.userId) : null}
+                  </SelectValue>
                 </SelectTrigger>
                 <SelectContent>
                   {users
@@ -337,7 +346,9 @@ export default function TeamsPage() {
               <Label>Cluster</Label>
               <Select value={tcForm.clusterId} onValueChange={(v) => v && setTcForm({ ...tcForm, clusterId: v, policyId: '' })}>
                 <SelectTrigger>
-                  <SelectValue placeholder="Select cluster" />
+                  <SelectValue placeholder="Select cluster">
+                    {tcForm.clusterId ? clusterName(tcForm.clusterId) : null}
+                  </SelectValue>
                 </SelectTrigger>
                 <SelectContent>
                   {clusters.map((c) => (
@@ -350,7 +361,9 @@ export default function TeamsPage() {
               <Label>Policy</Label>
               <Select value={tcForm.policyId} onValueChange={(v) => v && setTcForm({ ...tcForm, policyId: v })}>
                 <SelectTrigger>
-                  <SelectValue placeholder="Select policy" />
+                  <SelectValue placeholder="Select policy">
+                    {tcForm.policyId ? policyName(tcForm.policyId) : null}
+                  </SelectValue>
                 </SelectTrigger>
                 <SelectContent>
                   {policies

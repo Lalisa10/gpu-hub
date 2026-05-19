@@ -63,6 +63,7 @@ export default function SubmitWorkloadPage() {
   const [gpuCount, setGpuCount] = useState(1);
   const [cpuRequest, setCpuRequest] = useState(2);
   const [memRequest, setMemRequest] = useState(4096);
+  const [shmSize, setShmSize] = useState(0);
   const [error, setError] = useState('');
 
   const [llm, setLlm] = useState<LlmInferenceExtra>({
@@ -110,7 +111,13 @@ export default function SubmitWorkloadPage() {
   const handleSubmit = async () => {
     if (!projectId || !name || !image || !user) return;
     setError('');
-    const extra = tab === 'notebook' ? undefined : JSON.stringify(llm);
+    const shm = shmSize > 0 ? `${shmSize}Gi` : undefined;
+    const extra =
+      tab === 'notebook'
+        ? shm
+          ? JSON.stringify({ shmSize: shm })
+          : undefined
+        : JSON.stringify({ ...llm, ...(shm ? { shmSize: shm } : {}) });
     const cleanedSources = sources
       .filter((s) => s.sourceId && s.mountPath.trim())
       .map((s) => ({ sourceId: s.sourceId, mountPath: s.mountPath.trim() }));
@@ -203,7 +210,7 @@ export default function SubmitWorkloadPage() {
 
           {/* Section 2 – Resources (shared) */}
           <Section title="Resources">
-            <div className="grid grid-cols-3 gap-4">
+            <div className="grid grid-cols-2 gap-4 sm:grid-cols-4">
               <div className="space-y-1.5">
                 <Label className={LABEL_CLS}>GPU Count</Label>
                 <Input
@@ -234,6 +241,17 @@ export default function SubmitWorkloadPage() {
                   value={memRequest}
                   onChange={(e) => setMemRequest(+e.target.value)}
                 />
+              </div>
+              <div className="space-y-1.5">
+                <Label className={LABEL_CLS}>Shared Memory /dev/shm (GiB)</Label>
+                <Input
+                  className={INPUT_CLS}
+                  type="number"
+                  min={0}
+                  value={shmSize}
+                  onChange={(e) => setShmSize(+e.target.value)}
+                />
+                <p className="text-[11px] text-muted-foreground">0 = Kubernetes default (64Mi)</p>
               </div>
             </div>
           </Section>

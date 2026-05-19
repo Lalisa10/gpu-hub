@@ -25,19 +25,57 @@ import type { PolicyDto, CreatePolicyRequest } from '@/api/types';
 import type { Column } from '@/components/shared/data-table';
 import { Plus, Trash2, AlertCircle, HelpCircle } from 'lucide-react';
 
-interface FormState extends Omit<CreatePolicyRequest, 'extra'> {
+// All numeric fields are kept as raw strings so the user can type naturally
+// (no coercion on every keystroke). They are parsed to numbers at submit time.
+interface FormState {
+  clusterId: string;
+  name: string;
+  description?: string;
+  gpuQuota: string;
+  cpuQuota: string;
+  memoryQuota: string;
+  gpuLimit: string;
+  cpuLimit: string;
+  memoryLimit: string;
+  gpuOverQuotaWeight: string;
+  cpuOverQuotaWeight: string;
+  memoryOverQuotaWeight: string;
   extra?: string;
 }
+
+const NUMERIC_FIELDS = [
+  'gpuQuota', 'cpuQuota', 'memoryQuota',
+  'gpuLimit', 'cpuLimit', 'memoryLimit',
+  'gpuOverQuotaWeight', 'cpuOverQuotaWeight', 'memoryOverQuotaWeight',
+] as const;
 
 const emptyForm: FormState = {
   clusterId: '',
   name: '',
+  description: '',
+  gpuQuota: '',
+  cpuQuota: '',
+  memoryQuota: '',
+  gpuLimit: '',
+  cpuLimit: '',
+  memoryLimit: '',
+  gpuOverQuotaWeight: '',
+  cpuOverQuotaWeight: '',
+  memoryOverQuotaWeight: '',
   extra: '',
 };
 
 interface ValidationErrors {
   [key: string]: string;
 }
+
+/** Parse a raw input string to a number, or undefined when blank. */
+const parseNum = (raw: string): number | undefined => {
+  const t = raw.trim();
+  if (t === '') return undefined;
+  const n = Number(t);
+  return Number.isNaN(n) ? undefined : n;
+};
 
 const validateForm = (form: FormState): ValidationErrors => {
   const errors: ValidationErrors = {};
@@ -50,35 +88,16 @@ const validateForm = (form: FormState): ValidationErrors => {
     errors.clusterId = 'Cluster is required';
   }
 
-  // Validate positive numbers
-  if (form.gpuQuota != null && form.gpuQuota < -1) {
-    errors.gpuQuota = 'Must be a positive number or 0, -1';
-  }
-  if (form.cpuQuota != null && form.cpuQuota < -1) {
-    errors.cpuQuota = 'Must be a positive number or 0, -1';
-  }
-  if (form.memoryQuota != null && form.memoryQuota < -1) {
-    errors.memoryQuota = 'Must be a positive number or 0, -1';
-  }
-
-  if (form.gpuLimit != null && form.gpuLimit < -1) {
-    errors.gpuLimit = 'Must be a positive number or 0, -1';
-  }
-  if (form.cpuLimit != null && form.cpuLimit < -1) {
-    errors.cpuLimit = 'Must be a positive number or 0, -1';
-  }
-  if (form.memoryLimit != null && form.memoryLimit < -1) {
-    errors.memoryLimit = 'Must be a positive number or 0, -1';
-  }
-
-  if (form.gpuOverQuotaWeight != null && form.gpuOverQuotaWeight < -1) {
-    errors.gpuOverQuotaWeight = 'Must be a positive number or 0, -1';
-  }
-  if (form.cpuOverQuotaWeight != null && form.cpuOverQuotaWeight < -1) {
-    errors.cpuOverQuotaWeight = 'Must be a positive number or 0, -1';
-  }
-  if (form.memoryOverQuotaWeight != null && form.memoryOverQuotaWeight < -1) {
-    errors.memoryOverQuotaWeight = 'Must be a positive number or 0, -1';
+  // Validate numeric fields: must be a valid number ≥ -1 when provided
+  for (const field of NUMERIC_FIELDS) {
+    const raw = form[field].trim();
+    if (raw === '') continue;
+    const n = Number(raw);
+    if (Number.isNaN(n)) {
+      errors[field] = 'Must be a number';
+    } else if (n < -1) {
+      errors[field] = 'Must be a positive number or 0, -1';
+    }
   }
 
   // Validate extra JSON if provided
@@ -175,7 +194,18 @@ export default function PoliciesPage() {
     }
 
     const submitData: CreatePolicyRequest = {
-      ...form,
+      clusterId: form.clusterId,
+      name: form.name.trim(),
+      description: form.description?.trim() || undefined,
+      gpuQuota: parseNum(form.gpuQuota),
+      cpuQuota: parseNum(form.cpuQuota),
+      memoryQuota: parseNum(form.memoryQuota),
+      gpuLimit: parseNum(form.gpuLimit),
+      cpuLimit: parseNum(form.cpuLimit),
+      memoryLimit: parseNum(form.memoryLimit),
+      gpuOverQuotaWeight: parseNum(form.gpuOverQuotaWeight),
+      cpuOverQuotaWeight: parseNum(form.cpuOverQuotaWeight),
+      memoryOverQuotaWeight: parseNum(form.memoryOverQuotaWeight),
       extra: form.extra ? JSON.parse(form.extra) : undefined,
     };
 
@@ -275,7 +305,7 @@ export default function PoliciesPage() {
                     type="number"
                     placeholder="-1"
                     value={form.gpuQuota ?? ''}
-                    onChange={(e) => updateField('gpuQuota', e.target.value ? +e.target.value : undefined)}
+                    onChange={(e) => updateField('gpuQuota', e.target.value)}
                     min="0"
                     className={errors.gpuQuota ? 'border-destructive' : ''}
                   />
@@ -290,7 +320,7 @@ export default function PoliciesPage() {
                     type="number"
                     placeholder="-1"
                     value={form.cpuQuota ?? ''}
-                    onChange={(e) => updateField('cpuQuota', e.target.value ? +e.target.value : undefined)}
+                    onChange={(e) => updateField('cpuQuota', e.target.value)}
                     min="0"
                     className={errors.cpuQuota ? 'border-destructive' : ''}
                   />
@@ -305,7 +335,7 @@ export default function PoliciesPage() {
                     type="number"
                     placeholder="-1"
                     value={form.memoryQuota ?? ''}
-                    onChange={(e) => updateField('memoryQuota', e.target.value ? +e.target.value : undefined)}
+                    onChange={(e) => updateField('memoryQuota', e.target.value)}
                     min="0"
                     className={errors.memoryQuota ? 'border-destructive' : ''}
                   />
@@ -326,7 +356,7 @@ export default function PoliciesPage() {
                     type="number"
                     placeholder="-1"
                     value={form.gpuLimit ?? ''}
-                    onChange={(e) => updateField('gpuLimit', e.target.value ? +e.target.value : undefined)}
+                    onChange={(e) => updateField('gpuLimit', e.target.value)}
                     min="0"
                     className={errors.gpuLimit ? 'border-destructive' : ''}
                   />
@@ -341,7 +371,7 @@ export default function PoliciesPage() {
                     type="number"
                     placeholder="-1"
                     value={form.cpuLimit ?? ''}
-                    onChange={(e) => updateField('cpuLimit', e.target.value ? +e.target.value : undefined)}
+                    onChange={(e) => updateField('cpuLimit', e.target.value)}
                     min="0"
                     className={errors.cpuLimit ? 'border-destructive' : ''}
                   />
@@ -356,7 +386,7 @@ export default function PoliciesPage() {
                     type="number"
                     placeholder="-1"
                     value={form.memoryLimit ?? ''}
-                    onChange={(e) => updateField('memoryLimit', e.target.value ? +e.target.value : undefined)}
+                    onChange={(e) => updateField('memoryLimit', e.target.value)}
                     min="0"
                     className={errors.memoryLimit ? 'border-destructive' : ''}
                   />
@@ -381,7 +411,7 @@ export default function PoliciesPage() {
                       placeholder="1"
                       value={form.gpuOverQuotaWeight ?? ''}
                       onChange={(e) =>
-                        updateField('gpuOverQuotaWeight', e.target.value ? +e.target.value : undefined)
+                        updateField('gpuOverQuotaWeight', e.target.value)
                       }
                       min="0"
                       step="0.1"
@@ -399,7 +429,7 @@ export default function PoliciesPage() {
                       placeholder="1"
                       value={form.cpuOverQuotaWeight ?? ''}
                       onChange={(e) =>
-                        updateField('cpuOverQuotaWeight', e.target.value ? +e.target.value : undefined)
+                        updateField('cpuOverQuotaWeight', e.target.value)
                       }
                       min="0"
                       step="0.1"
@@ -417,7 +447,7 @@ export default function PoliciesPage() {
                       placeholder="1"
                       value={form.memoryOverQuotaWeight ?? ''}
                       onChange={(e) =>
-                        updateField('memoryOverQuotaWeight', e.target.value ? +e.target.value : undefined)
+                        updateField('memoryOverQuotaWeight', e.target.value)
                       }
                       min="0"
                       step="0.1"
