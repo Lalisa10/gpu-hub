@@ -112,6 +112,13 @@ public class PolicyService {
 
     public void delete(UUID id) {
         Policy policy = getPolicy(id);
+        // policy_id is NOT NULL on team_clusters/projects, so a policy in use cannot be removed
+        // without orphaning them. Refuse up front (before touching queues) with a clear message.
+        if (!teamClusterRepository.findByPolicy_Id(id).isEmpty()
+                || !projectRepository.findByPolicy_Id(id).isEmpty()) {
+            throw new IllegalStateException(
+                    "Policy đang được team-cluster/project sử dụng; gỡ chúng trước khi xóa");
+        }
         deleteQueues(policy);
         policyRepository.delete(policy);
     }

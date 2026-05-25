@@ -9,7 +9,20 @@ spring:
     username: ${DB_USERNAME:postgres}
     password: ${DB_PASSWORD:1234}
     driver-class-name: org.postgresql.Driver
+    hikari:
+      maximum-pool-size: ${DB_POOL_MAX:20}
+      minimum-idle: ${DB_POOL_MIN:2}
+      connection-timeout: ${DB_CONNECTION_TIMEOUT_MS:10000}
+      validation-timeout: ${DB_VALIDATION_TIMEOUT_MS:5000}
+      # Recycle connections before any firewall/NAT idle-timeout (DB lives outside the cluster).
+      keepalive-time: ${DB_KEEPALIVE_MS:30000}
+      max-lifetime: ${DB_MAX_LIFETIME_MS:600000}
+      idle-timeout: ${DB_IDLE_TIMEOUT_MS:300000}
+      # Log a stack trace if a connection is held longer than this — surfaces leaks/long holds.
+      leak-detection-threshold: ${DB_LEAK_DETECTION_MS:20000}
   jpa:
+    # Off: do not bind a JDBC connection to the whole HTTP request (esp. long-lived SSE streams).
+    open-in-view: false
     hibernate:
       ddl-auto: ${HIBERNATE_DDL:update}
 

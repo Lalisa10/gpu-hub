@@ -47,7 +47,7 @@ public class WorkloadController {
     }
 
     @DeleteMapping("/{id}")
-    @PreAuthorize("hasRole('ADMIN')")
+    @PreAuthorize("hasRole('ADMIN') or @rbac.canCancelWorkload(#id)")
     public ResponseEntity<Void> delete(@PathVariable UUID id) {
         workloadService.delete(id);
         return ResponseEntity.noContent().build();

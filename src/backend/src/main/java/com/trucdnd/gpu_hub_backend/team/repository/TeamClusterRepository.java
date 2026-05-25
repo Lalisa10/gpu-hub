@@ -10,5 +10,6 @@ import java.util.UUID;
 public interface TeamClusterRepository extends JpaRepository<TeamCluster, UUID> {
     boolean existsByTeam_IdAndCluster_Id(UUID teamId, UUID clusterId);
     List<TeamCluster> findByPolicy_Id(UUID policyId);
+    List<TeamCluster> findByTeam_Id(UUID teamId);
     Optional<TeamCluster> findByTeam_IdAndCluster_Id(UUID teamId, UUID clusterId);
 }

@@ -16,6 +16,9 @@ import com.trucdnd.gpu_hub_backend.team.entity.Team;
 import com.trucdnd.gpu_hub_backend.team.entity.TeamCluster;
 import com.trucdnd.gpu_hub_backend.team.repository.TeamClusterRepository;
 import com.trucdnd.gpu_hub_backend.team.repository.TeamRepository;
+import com.trucdnd.gpu_hub_backend.workload.entity.Workload;
+import com.trucdnd.gpu_hub_backend.workload.repository.WorkloadRepository;
+import com.trucdnd.gpu_hub_backend.workload.service.WorkloadService;
 
 import jakarta.persistence.EntityNotFoundException;
 import lombok.RequiredArgsConstructor;
@@ -32,6 +35,8 @@ public class ProjectService {
     private final ClusterRepository clusterRepository;
     private final PolicyRepository policyRepository;
     private final TeamClusterRepository teamClusterRepository;
+    private final WorkloadRepository workloadRepository;
+    private final WorkloadService workloadService;
     private final QueueService queueService;
     private final QueueSpecBuilder queueSpecBuilder;
 
@@ -105,8 +110,25 @@ public class ProjectService {
         return toDto(projectRepository.save(project));
     }
 
+    /**
+     * Deletes a project and everything it owns: every workload (with its K8s resource torn down)
+     * and the project's KAI Scheduler queue. Not {@code @Transactional} — the per-workload K8s
+     * teardown must not run while holding a JDBC connection, and each {@code workloadService.delete}
+     * is its own transaction. Queue deletion is 404-tolerant, so a re-run is idempotent.
+     */
     public void delete(UUID id) {
-        projectRepository.delete(getProject(id));
+        Project project = getProject(id);
+
+        for (Workload workload : workloadRepository.findByProject_Id(id)) {
+            workloadService.delete(workload.getId());
+        }
+
+        teamClusterRepository
+                .findByTeam_IdAndCluster_Id(project.getTeam().getId(), project.getCluster().getId())
+                .ifPresent(tc -> queueService.delete(
+                        project.getCluster(), null, queueSpecBuilder.buildProjectQueueName(project)));
+
+        projectRepository.delete(project);
     }
 
     private void apply(

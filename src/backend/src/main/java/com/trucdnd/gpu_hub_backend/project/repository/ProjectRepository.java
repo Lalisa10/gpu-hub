@@ -34,4 +34,6 @@ public interface ProjectRepository extends JpaRepository<Project, UUID> {
     boolean existsLeadOwnedProjectUsingPolicy(@Param("userId") UUID userId, @Param("policyId") UUID policyId);
 
     List<Project> findByPolicy_Id(UUID policyId);
+
+    List<Project> findByTeam_Id(UUID teamId);
 }

@@ -1,0 +1,64 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: gpu-hub-frontend
+  namespace: gpu-hub
+  labels:
+    app: gpu-hub-frontend
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: gpu-hub-frontend
+  template:
+    metadata:
+      labels:
+        app: gpu-hub-frontend
+    spec:
+      containers:
+        - name: frontend
+          image: lalisa27/gpuhub-dashboard:v0.0.5
+          imagePullPolicy: IfNotPresent
+          ports:
+            - name: http
+              containerPort: 80
+          env:
+            # nginx proxies /api/ to this backend Service (same namespace).
+            - name: BACKEND_HOST
+              value: "gpu-hub-backend"
+            - name: BACKEND_PORT
+              value: "8080"
+          resources:
+            requests:
+              cpu: "50m"
+              memory: "64Mi"
+            limits:
+              cpu: "250m"
+              memory: "128Mi"
+          readinessProbe:
+            httpGet:
+              path: /
+              port: http
+            periodSeconds: 10
+          livenessProbe:
+            httpGet:
+              path: /
+              port: http
+            periodSeconds: 20
+            failureThreshold: 3
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: gpu-hub-frontend
+  namespace: gpu-hub
+spec:
+  selector:
+    app: gpu-hub-frontend
+  ports:
+    - name: http
+      port: 80
+      targetPort: http
+      nodePort: 30136
+  # External entry point for the SPA (and the /api proxy to the backend).
+  type: NodePort

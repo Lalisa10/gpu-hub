@@ -1,8 +1,9 @@
 package com.trucdnd.gpu_hub_backend.workload.service;
 
 import com.trucdnd.gpu_hub_backend.common.constants.Workload.Status;
+import com.trucdnd.gpu_hub_backend.common.constants.Workload.Type;
 import com.trucdnd.gpu_hub_backend.kubernetes.service.BuiltinResourceService;
-import com.trucdnd.gpu_hub_backend.team.repository.TeamClusterRepository;
+import com.trucdnd.gpu_hub_backend.workload.entity.Workload;
 import com.trucdnd.gpu_hub_backend.workload.repository.WorkloadRepository;
 
 import io.fabric8.kubernetes.api.model.ContainerState;
@@ -16,26 +17,34 @@ import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
+import org.springframework.beans.factory.ObjectProvider;
 import org.springframework.context.ApplicationEventPublisher;
 
+import java.time.OffsetDateTime;
 import java.util.List;
+import java.util.UUID;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertNotNull;
+import static org.junit.jupiter.api.Assertions.assertNull;
+import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.Mockito.verify;
+import static org.mockito.Mockito.when;
 
 @ExtendWith(MockitoExtension.class)
 class WorkloadStatusReconcilerTest {
 
     @Mock private WorkloadRepository workloadRepository;
     @Mock private BuiltinResourceService builtinResourceService;
-    @Mock private TeamClusterRepository teamClusterRepository;
     @Mock private ApplicationEventPublisher eventPublisher;
+    @Mock private ObjectProvider<WorkloadStatusReconciler> self;
 
     private WorkloadStatusReconciler reconciler;
 
     @BeforeEach
     void setUp() {
         reconciler = new WorkloadStatusReconciler(
-                workloadRepository, builtinResourceService, teamClusterRepository, eventPublisher);
+                workloadRepository, builtinResourceService, eventPublisher, self);
     }
 
     @Test
@@ -87,6 +96,77 @@ class WorkloadStatusReconcilerTest {
         assertEquals(Status.PREEMPTED, reconciler.computeStatus(List.of(
                 pod("Running", true, false),
                 pod("Failed", false, true))));
+    }
+
+    @Test
+    void runningToPending_isPreempted() {
+        // KAI evicts the running pod; the recreated pod is Pending with no "Preempted" reason,
+        // so computeStatus yields PENDING. A workload that was RUNNING must flip to PREEMPTED.
+        UUID id = UUID.randomUUID();
+        Workload workload = Workload.builder()
+                .status(Status.RUNNING)
+                .workloadType(Type.LLM_INFERENCE)
+                .build();
+        when(workloadRepository.findById(id)).thenReturn(java.util.Optional.of(workload));
+
+        reconciler.applyStatus(id, Status.PENDING);
+
+        assertEquals(Status.PREEMPTED, workload.getStatus());
+        assertNotNull(workload.getFinishedAt());
+        verify(workloadRepository).save(workload);
+    }
+
+    @Test
+    void pendingToPending_staysPending_notPreempted() {
+        // A workload that never reached RUNNING and is still PENDING must not be treated as preempted.
+        UUID id = UUID.randomUUID();
+        Workload workload = Workload.builder()
+                .status(Status.PENDING)
+                .workloadType(Type.NOTEBOOK)
+                .build();
+        when(workloadRepository.findById(id)).thenReturn(java.util.Optional.of(workload));
+
+        // current == target == PENDING short-circuits; nothing is persisted.
+        reconciler.applyStatus(id, Status.PENDING);
+
+        assertEquals(Status.PENDING, workload.getStatus());
+        verify(workloadRepository, org.mockito.Mockito.never()).save(any());
+    }
+
+    @Test
+    void preemptedToRunning_recovers_andClearsFinishedAt() {
+        // KAI reschedules the preempted workload and its pod runs again — it must recover to RUNNING
+        // and shed the preemption finish timestamp so it no longer looks finished.
+        UUID id = UUID.randomUUID();
+        Workload workload = Workload.builder()
+                .status(Status.PREEMPTED)
+                .workloadType(Type.LLM_INFERENCE)
+                .finishedAt(OffsetDateTime.now())
+                .build();
+        when(workloadRepository.findById(id)).thenReturn(java.util.Optional.of(workload));
+
+        reconciler.applyStatus(id, Status.RUNNING);
+
+        assertEquals(Status.RUNNING, workload.getStatus());
+        assertNull(workload.getFinishedAt());
+        verify(workloadRepository).save(workload);
+    }
+
+    @Test
+    void preemptedToPending_staysPreempted() {
+        // While awaiting reschedule the recreated pod is Pending; the workload keeps showing
+        // PREEMPTED rather than flapping back to PENDING.
+        UUID id = UUID.randomUUID();
+        Workload workload = Workload.builder()
+                .status(Status.PREEMPTED)
+                .workloadType(Type.NOTEBOOK)
+                .build();
+        when(workloadRepository.findById(id)).thenReturn(java.util.Optional.of(workload));
+
+        reconciler.applyStatus(id, Status.PENDING);
+
+        assertEquals(Status.PREEMPTED, workload.getStatus());
+        verify(workloadRepository, org.mockito.Mockito.never()).save(any());
     }
 
     private static Pod pod(String phase, boolean ready, boolean preempted) {

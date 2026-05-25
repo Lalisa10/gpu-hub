@@ -16,4 +16,6 @@ public interface WorkloadRepository extends JpaRepository<Workload, UUID> {
             @Param("clusterId") UUID clusterId,
             @Param("status") Status status
     );
+
+    List<Workload> findByProject_Id(UUID projectId);
 }

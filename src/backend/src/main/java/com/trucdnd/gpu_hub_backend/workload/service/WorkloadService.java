@@ -188,9 +188,18 @@ public class WorkloadService {
         }
     }
 
+    /**
+     * Hard delete: tears down the workload's Kubernetes resource and removes the DB row entirely
+     * (so it disappears from the UI). The {@code workload_sources} join rows cascade away at the DB
+     * level. No status event is published — the row is gone, so SSE subscribers simply close.
+     * Orphaned pod events arriving while the K8s deletion propagates are handled gracefully by
+     * {@code WorkloadStatusReconciler.applyStatus} (unknown workload → no-op).
+     */
     @Transactional
     public void delete(UUID id) {
-        cancel(id);
+        Workload workload = getWorkload(id);
+        teardownK8sResource(workload);
+        workloadRepository.delete(workload);
     }
 
     @Transactional

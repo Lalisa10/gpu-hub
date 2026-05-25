@@ -11,103 +11,114 @@ stringData:
   MINIO_SECRET_KEY: "minioadmin"
   ADMIN_BOOTSTRAP_PASSWORD: "admin"
 ---
-apiVersion: v1
-kind: Pod
+apiVersion: apps/v1
+kind: Deployment
 metadata:
   name: gpu-hub-backend
   namespace: gpu-hub
   labels:
     app: gpu-hub-backend
 spec:
-  restartPolicy: Always
-  containers:
-    - name: backend
-      image: lalisa27/gpuhub:v0.0.3
-      imagePullPolicy: IfNotPresent
-      ports:
-        - name: http
-          containerPort: 8080
-      env:
-        # --- Database ---
-        - name: DB_URL
-          value: "jdbc:postgresql://192.168.49.1:5432/gpu-hub"
-        - name: DB_USERNAME
-          value: "postgres"
-        - name: DB_PASSWORD
-          valueFrom:
-            secretKeyRef:
-              name: gpu-hub-backend-secret
-              key: DB_PASSWORD
-        - name: HIBERNATE_DDL
-          value: "update"
+  replicas: 1
+  selector:
+    matchLabels:
+      app: gpu-hub-backend
+  template:
+    metadata:
+      labels:
+        app: gpu-hub-backend
+    spec:
+      containers:
+        - name: backend
+          image: lalisa27/gpuhub:v0.0.5
+          imagePullPolicy: IfNotPresent
+          ports:
+            - name: http
+              containerPort: 8080
+          env:
+            # --- Database ---
+            - name: DB_URL
+              value: "jdbc:postgresql://192.168.49.1:5432/gpu-hub"
+            - name: DB_USERNAME
+              value: "postgres"
+            - name: DB_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: gpu-hub-backend-secret
+                  key: DB_PASSWORD
+            - name: HIBERNATE_DDL
+              value: "update"
 
-        # --- Object storage (MinIO) ---
-        - name: MINIO_ENDPOINT
-          value: "http://172.17.0.1:9000"
-        - name: MINIO_ACCESS_KEY
-          valueFrom:
-            secretKeyRef:
-              name: gpu-hub-backend-secret
-              key: MINIO_ACCESS_KEY
-        - name: MINIO_SECRET_KEY
-          valueFrom:
-            secretKeyRef:
-              name: gpu-hub-backend-secret
-              key: MINIO_SECRET_KEY
+            # --- Object storage (MinIO) ---
+            - name: MINIO_ENDPOINT
+              value: "http://172.17.0.1:9000"
+            - name: MINIO_ACCESS_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: gpu-hub-backend-secret
+                  key: MINIO_ACCESS_KEY
+            - name: MINIO_SECRET_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: gpu-hub-backend-secret
+                  key: MINIO_SECRET_KEY
 
-        # --- Kubernetes ---
-        - name: KUBERNETES_KUBECONFIG_BUCKET
-          value: "kubeconfig"
+            # --- Kubernetes ---
+            - name: KUBERNETES_KUBECONFIG_BUCKET
+              value: "kubeconfig"
 
-        # --- JWT ---
-        - name: JWT_SECRET
-          valueFrom:
-            secretKeyRef:
-              name: gpu-hub-backend-secret
-              key: JWT_SECRET
-        - name: JWT_ACCESS_EXPIRATION
-          value: "900"
-        - name: JWT_REFRESH_EXPIRATION
-          value: "604800"
+            # --- JWT ---
+            - name: JWT_SECRET
+              valueFrom:
+                secretKeyRef:
+                  name: gpu-hub-backend-secret
+                  key: JWT_SECRET
+            - name: JWT_ACCESS_EXPIRATION
+              value: "900"
+            - name: JWT_REFRESH_EXPIRATION
+              value: "604800"
 
-        # --- App ---
-        - name: CORS_ALLOWED_ORIGINS
-          value: "http://localhost,http://localhost:5173,http://localhost:30136"
-        - name: ADMIN_BOOTSTRAP_USERNAME
-          value: "admin"
-        - name: ADMIN_BOOTSTRAP_EMAIL
-          value: "admin@gmail.com.vn"
-        - name: ADMIN_BOOTSTRAP_PASSWORD
-          valueFrom:
-            secretKeyRef:
-              name: gpu-hub-backend-secret
-              key: ADMIN_BOOTSTRAP_PASSWORD
+            # --- App ---
+            # Requests now arrive same-origin through the frontend nginx proxy, so CORS
+            # only needs the dev origins. Add the frontend's external URL if the SPA is
+            # ever served from a different origin than the API.
+            - name: CORS_ALLOWED_ORIGINS
+              value: "http://localhost,http://localhost:5173,http://localhost:30136"
+            - name: ADMIN_BOOTSTRAP_USERNAME
+              value: "admin"
+            - name: ADMIN_BOOTSTRAP_EMAIL
+              value: "admin@gmail.com.vn"
+            - name: ADMIN_BOOTSTRAP_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: gpu-hub-backend-secret
+                  key: ADMIN_BOOTSTRAP_PASSWORD
 
-        # --- JVM ---
-        - name: JAVA_OPTS
-          value: ""
-      resources:
-        requests:
-          cpu: "250m"
-          memory: "512Mi"
-        limits:
-          cpu: "1"
-          memory: "1Gi"
-      startupProbe:
-        tcpSocket:
-          port: http
-        initialDelaySeconds: 10
-        periodSeconds: 5
-        failureThreshold: 30
-      readinessProbe:
-        tcpSocket:
-          port: http
-        periodSeconds: 10
-      livenessProbe:
-        tcpSocket:
-          port: http
-        periodSeconds: 20
-        failureThreshold: 3
+            # --- JVM ---
+            - name: JAVA_OPTS
+              value: ""
+          resources:
+            requests:
+              cpu: "250m"
+              memory: "512Mi"
+            limits:
+              cpu: "1"
+              memory: "1Gi"
+          startupProbe:
+            tcpSocket:
+              port: http
+            initialDelaySeconds: 10
+            periodSeconds: 5
+            failureThreshold: 30
+          readinessProbe:
+            tcpSocket:
+              port: http
+            periodSeconds: 10
+          livenessProbe:
+            tcpSocket:
+              port: http
+            periodSeconds: 20
+            failureThreshold: 3
 ---
 apiVersion: v1
 kind: Service
@@ -121,4 +132,5 @@ spec:
     - name: http
       port: 8080
       targetPort: http
-  type: NodePort
+  # Internal only — the frontend nginx proxies /api/ to this Service.
+  type: ClusterIP

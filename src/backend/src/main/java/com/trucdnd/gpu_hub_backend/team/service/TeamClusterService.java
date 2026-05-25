@@ -79,6 +79,10 @@ public class TeamClusterService {
                 cluster, teamCluster.getNamespace(),
                 K8sLabels.TEAM_CLUSTER_ID, teamCluster.getId().toString());
 
+        // Drop the team-level KAI queue (cluster-scoped, so it lives outside the namespace and
+        // would otherwise be orphaned). 404-tolerant via CustomResourceService.delete.
+        queueService.delete(cluster, null, queueSpecBuilder.buildTeamQueueName(teamCluster));
+
         teamClusterRepository.delete(teamCluster);
         kubernetesService.deleteNamespace(cluster, teamCluster.getNamespace());
     }

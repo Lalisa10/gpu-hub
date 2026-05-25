@@ -1,6 +1,7 @@
 package com.trucdnd.gpu_hub_backend.config;
 
 import com.trucdnd.gpu_hub_backend.auth.filter.JwtAuthFilter;
+import jakarta.servlet.DispatcherType;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
@@ -37,6 +38,12 @@ public class SecurityConfig {
                 .formLogin(AbstractHttpConfigurer::disable)
                 .sessionManagement(session -> session.sessionCreationPolicy(SessionCreationPolicy.STATELESS))
                 .authorizeHttpRequests(auth -> auth
+                        // SSE endpoints (SseEmitter) re-enter the filter chain on the ASYNC
+                        // dispatch with an empty SecurityContext (JwtAuthFilter is once-per-request
+                        // and the session is stateless). The initial REQUEST dispatch already
+                        // enforced auth, so let internal ASYNC/ERROR dispatches through — otherwise
+                        // AuthorizationFilter denies them after the stream response is committed.
+                        .dispatcherTypeMatchers(DispatcherType.ASYNC, DispatcherType.ERROR).permitAll()
                         .requestMatchers(HttpMethod.OPTIONS, "/**").permitAll()
                         .requestMatchers("/api/auth/**").permitAll()
                         .requestMatchers("/api/users/**").hasRole("ADMIN")
