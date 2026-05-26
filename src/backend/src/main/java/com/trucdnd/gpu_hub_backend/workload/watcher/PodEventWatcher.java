@@ -94,7 +94,7 @@ public class PodEventWatcher {
             @Override
             public void eventReceived(Action action, Pod pod) {
                 try {
-                    reconciler.onPodEvent(cluster, action, pod);
+                    reconciler.onPodEvent(cluster, pod);
                 } catch (RuntimeException e) {
                     log.warn("Reconciler error for pod event on cluster {}: {}",
                             cluster.getId(), e.getMessage());
@@ -127,7 +127,7 @@ public class PodEventWatcher {
                     .list().getItems();
             for (Pod pod : pods) {
                 try {
-                    reconciler.onPodEvent(cluster, Watcher.Action.MODIFIED, pod);
+                    reconciler.onPodEvent(cluster, pod);
                 } catch (RuntimeException e) {
                     log.debug("Reconciler error during initial sync on cluster {}: {}",
                             cluster.getId(), e.getMessage());

@@ -91,12 +91,13 @@ public class NotebookSpecBuilder {
                 workload.getSubmittedBy().getUsername());
         baseLabels.put(K8sLabels.PROJECT, K8sLabels.sanitize(workload.getProject().getName()));
 
+        // Notebook CRD's spec.template has no `metadata` field (structural schema strips it),
+        // so the Kubeflow notebook-controller propagates the CR's own metadata.labels onto the
+        // pod. All pod-bound labels — including the KAI queue — must live here, not on the
+        // (ignored) spec.template.metadata.
         Map<String, String> crLabels = new LinkedHashMap<>(baseLabels);
         crLabels.put(WORKLOAD_ID_LABEL, workload.getId().toString());
-
-        Map<String, String> podLabels = new LinkedHashMap<>(baseLabels);
-        podLabels.put(WORKLOAD_ID_LABEL, workload.getId().toString());
-        podLabels.put("kai.scheduler/queue", queueName);
+        crLabels.put("kai.scheduler/queue", queueName);
 
         Map<String, Object> podSpec = new HashMap<>();
         podSpec.put("containers", List.of(container));
@@ -108,8 +109,7 @@ public class NotebookSpecBuilder {
         Map<String, Object> affinity = nodeAffinity(nodePool);
         if (affinity != null) podSpec.put("affinity", affinity);
 
-        Map<String, Object> templateMetadata = Map.of("labels", podLabels);
-        Map<String, Object> template = Map.of("metadata", templateMetadata, "spec", podSpec);
+        Map<String, Object> template = Map.of("spec", podSpec);
         Map<String, Object> spec = Map.of("template", template);
 
         return new GenericKubernetesResourceBuilder()
