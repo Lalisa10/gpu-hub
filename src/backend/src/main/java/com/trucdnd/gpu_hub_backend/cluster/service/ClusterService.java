@@ -129,6 +129,7 @@ public class ClusterService {
 
     public void delete(UUID id) {
         clusterRepository.deleteById(id);
+        clientFactory.evict(id);
     }
 
     public ClusterDto update(ClusterDto clusterDto) {
@@ -188,7 +189,10 @@ public class ClusterService {
         storeKubeconfig(objectKey, file);
 
         cluster.setKubeconfigRef(objectKey);
-        return ClusterMapper.toDto(clusterRepository.save(cluster));
+        ClusterDto dto = ClusterMapper.toDto(clusterRepository.save(cluster));
+        // Drop the cached client so subsequent operations pick up the replaced kubeconfig.
+        clientFactory.evict(id);
+        return dto;
     }
 
     /** Lightweight node-name listing for the cluster — used to populate policy node pools. */
