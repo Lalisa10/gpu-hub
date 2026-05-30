@@ -46,7 +46,7 @@ Make sure the following are installed and available:
 - **PostgreSQL 14+** — a database named `gpu-hub`
 - **MinIO** (or any S3-compatible object store)
 - **Docker** (optional — for building/running container images)
-- One or more **Kubernetes clusters** with KAI Scheduler installed (required only to actually run workloads; the API and UI boot without them)
+- One or more **Kubernetes clusters** with KAI Scheduler, JuiceFS CSI Driver and GPU Operator installed
 
 The schema is created automatically on backend startup (via `spring.sql.init.schema-locations`, currently `schema_v7.sql`), so you only need to create an empty database.
 
